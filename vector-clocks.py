@@ -9,6 +9,9 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
+# Local process variables
+message_queue = []
+
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
     if iproc == 0:
