@@ -25,17 +25,21 @@ def main():
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         sleep(2)
-        for i in range(1, nproc):
+        for i in range(0, nproc-1):
+            print("Process {0} -> {1}".format(i, ops_list[i]))
             print("Process {0} sending ops to {1} @ {2} seconds".format(
                 iproc, 
-                i,
+                i+1, #Sending to i+1
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
-            comm.send(i, dest=i, tag=0)
+            print(ops_list[i])
+            comm.send(ops_list[i], dest=i+1, tag=0)
     else:
         print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         data = comm.recv(source=0, tag=0)
         print("Process {0} got some data from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        print("{0}".format(data))
+        print("\n")
 
 def randoms():
     vector_arr = numpy.zeros((nproc, nproc))
