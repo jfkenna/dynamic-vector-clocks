@@ -4,6 +4,7 @@ from datetime import datetime
 import random
 from time import sleep
 import sys
+import re
 
 # MPI World Setup (Lafayette 2021) (Dalcin 2020).
 comm = MPI.COMM_WORLD
@@ -13,13 +14,26 @@ nproc = comm.Get_size()
 # Local process variables
 message_queue = []
 
+def process_loop(process_ops):
+    print("Process loop: {0}".format(iproc))
+    print(process_ops)
+    for op in process_ops:
+        # If the event was a receive
+        if re.match("^r([1-9].*)", op):
+            print("Receive event:", op)
+        # Send event
+        elif re.match("^s([1-9].*)", op):
+            print("Send event:", op)
+        # Any other internal event
+        elif re.match("^([a-zA-Z].*)", op):
+            print("Internal event:", op)
+
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
     ops_list = [
-        "s1, a", #Process 1
-        "r1, r2", #Process 2
-        "s2, b" #Process 3
+            "s1, a", #Process 1
+            "r1", #Process 2
     ]
 
     if iproc == 0:
@@ -32,14 +46,22 @@ def main():
                 i+1, #Sending to i+1
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
-            print(ops_list[i])
+            #print(ops_list[i])
             comm.send(ops_list[i], dest=i+1, tag=0)
+            print("\n")
+
+        # Await until each process has finished and sent a confirmation back
+            
     else:
         print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         data = comm.recv(source=0, tag=0)
+        process_ops = data.split(", ")
         print("Process {0} got some data from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
-        print("{0}".format(data))
+        process_loop(process_ops)
         print("\n")
+
+        
+
 
 def randoms():
     vector_arr = numpy.zeros((nproc, nproc))
@@ -72,4 +94,8 @@ https://stackoverflow.com/questions/7588511/format-a-datetime-into-a-string-with
 https://stackoverflow.com/questions/6088077/how-to-get-a-random-number-between-a-float-range 15th March
 https://numpy.org/doc/stable/reference/generated/numpy.zeros.html 16th March
 https://nyu-cds.github.io/python-mpi/03-nonblocking/#:~:text=In%20MPI%2C%20non%2Dblocking%20communication,uniquely%20identifys%20the%20started%20operation. 24th March
+https://www.w3schools.com/python/ref_string_split.asp 30th March
+https://www.freecodecamp.org/news/python-switch-statement-switch-case-example/ 30th March
+https://community.safe.com/general-10/how-to-find-string-that-start-with-one-letter-then-numbers-23880?tid=23880&fid=10 30th March
+https://www.tutorialsteacher.com/regex/grouping 30th March
 '''
