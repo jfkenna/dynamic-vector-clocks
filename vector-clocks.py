@@ -13,10 +13,24 @@ nproc = comm.Get_size()
 # Local process variables
 message_queue = []
 
-print("arglist", sys.argv[3])
-print("onetwo")
-
 def main():
+    vector_arr = numpy.zeros((nproc, nproc))
+    if iproc == 0:
+        print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        sleep(2)
+        for i in range(1, nproc):
+            print("Process {0} sending ops to {1} @ {2} seconds".format(
+                iproc, 
+                i,
+                datetime.now().strftime("%H:%M:%S.%f"), 
+            ))
+            comm.send(i, dest=i, tag=0)
+    else:
+        print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        data = comm.recv(source=0, tag=0)
+        print("Process {0} got some data from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+
+def randoms():
     vector_arr = numpy.zeros((nproc, nproc))
     if iproc == 0:
         vector_arr[iproc][0] = 1
