@@ -15,6 +15,13 @@ message_queue = []
 
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
+
+    ops_list = [
+        "s1, a", #Process 1
+        "r1, r2", #Process 2
+        "s2, b" #Process 3
+    ]
+
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         sleep(2)
