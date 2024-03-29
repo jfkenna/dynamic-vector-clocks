@@ -3,6 +3,7 @@ import numpy
 from datetime import datetime
 import random
 from time import sleep
+import sys
 
 # MPI World Setup (Lafayette 2021) (Dalcin 2020).
 comm = MPI.COMM_WORLD
@@ -11,6 +12,9 @@ nproc = comm.Get_size()
 
 # Local process variables
 message_queue = []
+
+print("arglist", sys.argv[3])
+print("onetwo")
 
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
@@ -42,4 +46,5 @@ Refs
 https://stackoverflow.com/questions/7588511/format-a-datetime-into-a-string-with-milliseconds 13th March
 https://stackoverflow.com/questions/6088077/how-to-get-a-random-number-between-a-float-range 15th March
 https://numpy.org/doc/stable/reference/generated/numpy.zeros.html 16th March
+https://nyu-cds.github.io/python-mpi/03-nonblocking/#:~:text=In%20MPI%2C%20non%2Dblocking%20communication,uniquely%20identifys%20the%20started%20operation. 24th March
 '''
