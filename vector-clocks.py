@@ -18,15 +18,25 @@ def process_loop(process_ops):
     print("Process loop: {0}".format(iproc))
     print(process_ops)
     for op in process_ops:
-        # If the event was a receive
-        if re.match("^r([1-9].*)", op):
-            print("Receive event:", op)
+        print("Operation:", op)
+        recv_op = re.search("^r([1-9].*)", op) # If the event was a receive
+        send_op = re.search("^s([1-9].*)", op) # If the event was a send
+        internal_op = re.search("^([a-zA-Z].*)", op) # If the event was internal
+        if recv_op:
+            print("Receive with tag:", recv_op.group(1))
+        elif send_op:
+            print("Send with tag:", send_op.group(1))
+        elif internal_op:
+            print("An internal op:", internal_op.group(0))
+        """
         # Send event
         elif re.match("^s([1-9].*)", op):
-            print("Send event:", op)
+           print("Send event:", op)
         # Any other internal event
         elif re.match("^([a-zA-Z].*)", op):
-            print("Internal event:", op)
+            print( "Internal event:", op)
+        """
+
 
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
@@ -98,4 +108,5 @@ https://www.w3schools.com/python/ref_string_split.asp 30th March
 https://www.freecodecamp.org/news/python-switch-statement-switch-case-example/ 30th March
 https://community.safe.com/general-10/how-to-find-string-that-start-with-one-letter-then-numbers-23880?tid=23880&fid=10 30th March
 https://www.tutorialsteacher.com/regex/grouping 30th March
+https://stackoverflow.com/questions/1327369/extract-part-of-a-regex-match 30th March
 '''
