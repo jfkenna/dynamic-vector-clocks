@@ -36,11 +36,16 @@ def determine_recv_process(ops_list, event_tag):
             return idx+1
         
 def determine_sender_process(ops_list, event_tag):
+    # Target events for sender processes
     target_event = "s" + event_tag
-    print("Target event:", target_event)
+    target_bcast_event = "r" + event_tag
+    print("Target events: {0},{1}".format(target_event, target_bcast_event))
     for idx in range(0, len(ops_list)):
         if target_event in ops_list[idx]:
             print("Received this event from process {0}".format(idx+1))
+            return idx+1
+        elif target_bcast_event in ops_list[idx]:
+            print("Received this event from a broadcast from {0}".format(idx+1))
             return idx+1
 
 def process_loop(event_list, process_events):
@@ -111,7 +116,7 @@ def process_loop(event_list, process_events):
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
-    
+    """
     #Send/receive (unicast)
     event_list = [
             "s1, a, b, r2", #Process 1
@@ -125,7 +130,7 @@ def main():
             "r1, s2, b, c", 
             "r1, d, e, r2"
     ]
-    """
+
 
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
