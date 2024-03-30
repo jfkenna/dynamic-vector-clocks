@@ -114,31 +114,23 @@ def process_loop(event_list, process_events):
             print( "Internal event:", op)
         """
 
+def construct_arr_from_file(file_loc):
+    event_list = []
+    # Open the file from args (second element)
+    file = open(file_loc)
+    lines = file.readlines()
+    # Append each line to the events list
+    for line in lines:
+        event_list.append(line.strip())
+    return event_list
 
 def main():
-    #Send/receive (unicast)
-    event_list = [
-            "s1, a, b, r2", #Process 1
-            "r1, s2, r3", #Process 2
-            "c, d, s3" #Process 3
-    ]
-    """
-    #Send/receive (broadcast)
-    event_list = [
-            "a, b1",
-            "r1, s2, b, c", 
-            "r1, d, e, r2"
-    ]
-    event_list = [
-            "s1, r3", #Process 1
-            "r1, s2", #Process 2
-            "r2, s3" #Process 3
-    ]
-    """
+    # Construct event list from second argument (file directory)
+    event_list = construct_arr_from_file(sys.argv[1])
 
     if iproc == 0:
-        print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
-        sleep(2)
+        print("Process {0} to send events to other processes @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        sleep(1)
         for i in range(0, nproc-1):
             print("Process {0} -> {1}".format(i, event_list[i]))
             print("Process {0} sending ops to {1} @ {2} seconds".format(
@@ -178,4 +170,9 @@ https://pythonprinciples.com/blog/python-convert-string-to-int/#:~:text=To%20con
 https://www.uuidgenerator.net/dev-corner/python 30th March
 https://www.w3schools.com/python/python_lists_comprehension.asp 30th March
 https://stackoverflow.com/questions/3162271/get-loop-count-inside-a-for-loop 30th March
+https://ioflood.com/blog/bash-count-lines/#:~:text=To%20count%20lines%20in%20a%20file%20using%20Bash%2C%20you%20can,number%20of%20lines%20it%20contains.&text=In%20this%20example%2C%20we%20use,on%20a%20file%20named%20'filename. 30th March
+https://kodekloud.com/blog/bash-getopts/ 30th March
+https://linuxize.com/post/bash-functions/ 30th March
+https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-script 30th March
+https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 '''
