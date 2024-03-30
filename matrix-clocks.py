@@ -59,7 +59,11 @@ def process_loop(event_list, process_events):
         if recv_op:
             event_tag = recv_op.group(1)
             print("Receive with tag:", recv_op.group(1))
-            
+
+            #Probe for messages
+            s = MPI.Status()
+            comm.Probe(status=s)
+            print("tag", s.tag)
             data = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
             orig_idx = determine_sender_process(event_list, event_tag)
             print("Process {0} received {1} from process {2} @ {3}".format(
