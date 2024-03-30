@@ -1,3 +1,3 @@
 #! /bin/bash
 
-mpiexec -n 3 python3 vector-clocks.py
+mpiexec -n 3 python3 matrix-clocks.py
