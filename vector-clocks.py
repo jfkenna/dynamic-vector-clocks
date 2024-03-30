@@ -5,6 +5,7 @@ import random
 from time import sleep
 import sys
 import re
+import uuid
 
 # MPI World Setup (Lafayette 2021) (Dalcin 2020).
 comm = MPI.COMM_WORLD
@@ -22,10 +23,10 @@ def determine_recv_process(ops_list, event_tag):
             print("Send this event to process", idx+1)
             return idx+1
         
-def process_loop(ops_list, process_ops):
+def process_loop(event_list, process_events):
     print("Process loop: {0}".format(iproc))
-    print(process_ops)
-    for op in process_ops:
+    print(process_events)
+    for op in process_events:
         print("Operation:", op)
         recv_op = re.search("^r([1-9].*)", op) # If the event was a receive
         send_op = re.search("^s([1-9].*)", op) # If the event was a send
@@ -38,7 +39,7 @@ def process_loop(ops_list, process_ops):
 
             print("Process {0} received {1} from process {2} @ {3}".format(
                 iproc, 
-                data,
+                str(data["data"]),
                 "?",
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
@@ -46,16 +47,22 @@ def process_loop(ops_list, process_ops):
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
-            dest = determine_recv_process(ops_list, event_tag)
-            print("The dest", dest)
+            dest = determine_recv_process(event_list, event_tag)
+            uuid_gen = uuid.uuid4()
+            message = {
+                'data': uuid_gen,
+                'vc': []
+            }
 
-            print("Process {0} sending message to {1} @ {2}".format(
+            print("Process {0} sending message with UUID {1} to {2} @ {3}".format(
                 iproc, 
+                uuid_gen,
                 dest,
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
-            comm.send(123, dest=dest, tag=int(event_tag))
+            # Send the message/UUID and VC to the destination process
+            comm.send(message, dest=dest, tag=int(event_tag))
             
         elif internal_op:
             print("Process {0} internal op {1} @ {2}".format(
@@ -76,7 +83,7 @@ def process_loop(ops_list, process_ops):
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
-    ops_list = [
+    event_list = [
             "s1, a", #Process 1
             "r1", #Process 2
     ]
@@ -85,14 +92,14 @@ def main():
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         sleep(2)
         for i in range(0, nproc-1):
-            print("Process {0} -> {1}".format(i, ops_list[i]))
+            print("Process {0} -> {1}".format(i, event_list[i]))
             print("Process {0} sending ops to {1} @ {2} seconds".format(
                 iproc, 
                 i+1, #Sending to i+1
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
             #print(ops_list[i])
-            comm.send(ops_list[i], dest=i+1, tag=0)
+            comm.send(event_list[i], dest=i+1, tag=0)
             print("\n")
 
         # Await until each process has finished and sent a confirmation back
@@ -100,9 +107,9 @@ def main():
     else:
         print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         data = comm.recv(source=0, tag=0)
-        process_ops = data.split(", ")
-        print("Process {0} got some data from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
-        process_loop(ops_list, process_ops)
+        process_events = data.split(", ")
+        print("Process {0} obtained event_list from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        process_loop(event_list, process_events)
         print("\n")
 
         
