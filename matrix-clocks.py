@@ -60,7 +60,7 @@ def process_loop(event_list, process_events):
                 if str(s.tag) == event_tag:
                     # Set orig_idx (process ID) and obtain the message
                     orig_idx = s.tag
-                    data = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
+                    data = comm.recv(source=s.tag, tag=int(event_tag))
                     break
 
             print("Process {0} received {1} from process {2} @ {3}".format(
@@ -114,7 +114,7 @@ def process_loop(event_list, process_events):
             print( "Internal event:", op)
         """
 
-def construct_arr_from_file(file_loc):
+def event_list_from_file(file_loc):
     event_list = []
     # Open the file from args (second element)
     file = open(file_loc)
@@ -126,7 +126,8 @@ def construct_arr_from_file(file_loc):
 
 def main():
     # Construct event list from second argument (file directory)
-    event_list = construct_arr_from_file(sys.argv[1])
+    file_name = sys.argv[1]
+    event_list = event_list_from_file(file_name)
 
     if iproc == 0:
         print("Process {0} to send events to other processes @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
