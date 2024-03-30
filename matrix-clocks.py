@@ -34,19 +34,6 @@ def determine_recv_process(ops_list, event_tag):
         if target_event in ops_list[idx]:
             print("Send this event to process {0}".format(idx+1))
             return idx+1
-        
-def determine_sender_process(ops_list, event_tag):
-    # Target events for sender processes
-    target_event = "s" + event_tag
-    target_bcast_event = "r" + event_tag
-    print("Target events: {0},{1}".format(target_event, target_bcast_event))
-    for idx in range(0, len(ops_list)):
-        if target_event in ops_list[idx]:
-            print("Received this event from process {0}".format(idx+1))
-            return idx+1
-        elif target_bcast_event in ops_list[idx]:
-            print("Received this event from a broadcast from {0}".format(idx+1))
-            return idx+1
 
 def process_loop(event_list, process_events):
     print("Process loop: {0} : {1}".format(iproc, process_events))
@@ -60,12 +47,17 @@ def process_loop(event_list, process_events):
             event_tag = recv_op.group(1)
             print("Receive with tag:", recv_op.group(1))
 
-            #Probe for messages
-            s = MPI.Status()
-            comm.Probe(status=s)
-            print("tag", s.tag)
-            data = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
-            orig_idx = determine_sender_process(event_list, event_tag)
+            # Probe for messages, and obtain message from channel
+            while True:
+                s = MPI.Status()
+                comm.Probe(tag=int(event_tag), status=s)
+                # If the message in the channel matches the tag this event requires
+                if str(s.tag) == event_tag:
+                    # Set orig_idx (process ID) and obtain the message
+                    orig_idx = s.tag
+                    data = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
+                    break
+
             print("Process {0} received {1} from process {2} @ {3}".format(
                 iproc, 
                 str(data["data"]),
@@ -120,7 +112,6 @@ def process_loop(event_list, process_events):
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
-    """
     #Send/receive (unicast)
     event_list = [
             "s1, a, b, r2", #Process 1
@@ -134,7 +125,12 @@ def main():
             "r1, s2, b, c", 
             "r1, d, e, r2"
     ]
-
+    event_list = [
+            "s1, r3", #Process 1
+            "r1, s2", #Process 2
+            "r2, s3" #Process 3
+    ]
+    """
 
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
