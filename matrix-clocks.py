@@ -36,14 +36,13 @@ def determine_recv_process(ops_list, event_tag):
             return idx+1
         
 def process_loop(event_list, process_events):
-    print("Process loop: {0}".format(iproc))
-    print(process_events)
-    for op in process_events:
-        print("Operation:", op)
-        recv_op = re.search("^r([1-9].*)", op) # If the event was a receive
-        send_op = re.search("^s([1-9].*)", op) # If the event was a send
-        bcast_op = re.search("^b([1-9].*)", op) # If the event was a broadcast
-        internal_op = re.search("^([a-zA-Z].*)", op) # If the event was internal
+    print("Process loop: {0} : {1}".format(iproc, process_events))
+    for idx, event in enumerate(process_events):
+        print("Event #{0} -> {1}".format(idx, event))
+        recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
+        send_op = re.search("^s([1-9].*)", event) # If the event was a send
+        bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
+        internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
         if recv_op:
             event_tag = recv_op.group(1)
             print("Receive with tag:", recv_op.group(1))
@@ -78,7 +77,6 @@ def process_loop(event_list, process_events):
             comm.send(message, dest=dest, tag=int(event_tag))
         elif bcast_op:
             event_tag = bcast_op.group(1)
-            print(event_tag)
             uuid_gen = uuid.uuid4()
             message = {
                 'data': uuid_gen,
