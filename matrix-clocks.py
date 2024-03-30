@@ -184,5 +184,6 @@ https://stackoverflow.com/questions/1327369/extract-part-of-a-regex-match 30th M
 https://realpython.com/python-string-contains-substring/ 30th March
 https://pythonprinciples.com/blog/python-convert-string-to-int/#:~:text=To%20convert%20a%20string%20to%20an%20integer%2C%20use%20the%20built,an%20integer%20as%20its%20output. 30th March
 https://www.uuidgenerator.net/dev-corner/python 30th March
-https://www.w3schools.com/python/python_lists_comprehension.asp 30th
+https://www.w3schools.com/python/python_lists_comprehension.asp 30th March
+https://stackoverflow.com/questions/3162271/get-loop-count-inside-a-for-loop 30th March
 '''
