@@ -15,6 +15,9 @@ nproc = comm.Get_size()
 # Local process variables
 message_queue = []
 
+def send_message(message, dest, tag):
+    comm.send(message, dest=dest, tag=int(tag))
+
 def broadcast_message(message, event_tag):
     # Extract target processes (without root)
     target_idx = [x for x in range(1, nproc) if x != iproc]
@@ -25,7 +28,7 @@ def broadcast_message(message, event_tag):
     ))
     # Develop the vector clock here, knowing target proce
     for idx in target_idx:
-        comm.send(message, dest=idx, tag=int(event_tag))
+        send_message(message, idx, event_tag)
 
 def determine_recv_process(ops_list, event_tag):
     target_event = "r" + event_tag
@@ -36,6 +39,8 @@ def determine_recv_process(ops_list, event_tag):
             return idx+1
 
 def process_loop(event_list, process_events):
+    # Process n's vector array
+    vector_arr = numpy.zeros((nproc-1, nproc-1))
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
         print("Event #{0} -> {1}".format(idx, event))
@@ -83,7 +88,8 @@ def process_loop(event_list, process_events):
             ))
 
             # Send the message/UUID and VC to the destination process
-            comm.send(message, dest=dest, tag=int(event_tag))
+            send_message(message, dest, event_tag)
+
         elif bcast_op:
             event_tag = bcast_op.group(1)
             uuid_gen = uuid.uuid4()
@@ -110,8 +116,6 @@ def process_loop(event_list, process_events):
 
 
 def main():
-    vector_arr = numpy.zeros((nproc, nproc))
-
     #Send/receive (unicast)
     event_list = [
             "s1, a, b, r2", #Process 1
@@ -155,32 +159,6 @@ def main():
         print("Process {0} obtained event_list from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         process_loop(event_list, process_events)
         print("\n")
-
-        
-
-
-def randoms():
-    vector_arr = numpy.zeros((nproc, nproc))
-    if iproc == 0:
-        vector_arr[iproc][0] = 1
-        print(vector_arr)
-        print("Root process @ {0}".format(str(datetime.now().strftime("%H:%M:%S.%f"))))
-        for i in range(1, nproc):
-            vector_arr_recv = comm.recv(source=i, tag=0)
-            print("Process 0 received V.A from process {0}".format(i))
-            print(vector_arr_recv)
-    else:
-        sleeper = random.uniform(0, 10)
-        print("Process {0} decided at {1} to sleep for {2} seconds".format(
-            iproc, 
-            datetime.now().strftime("%H:%M:%S.%f"), 
-            sleeper
-        ))
-        sleep(sleeper)
-        # Increment vector array at index 0
-        vector_arr[iproc][0] = 1
-        print("Process {0} sending @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
-        comm.send(vector_arr, dest=0, tag=0)
 
 main()
 
