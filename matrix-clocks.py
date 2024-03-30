@@ -23,7 +23,7 @@ def broadcast_message(message, event_tag):
         target_idx,
         datetime.now().strftime("%H:%M:%S.%f"), 
     ))
-    # Develop the vector clock here, knowing target processes
+    # Develop the vector clock here, knowing target proce
     for idx in target_idx:
         comm.send(message, dest=idx, tag=int(event_tag))
 
@@ -32,9 +32,22 @@ def determine_recv_process(ops_list, event_tag):
     print("Target event:", target_event)
     for idx in range(0, len(ops_list)):
         if target_event in ops_list[idx]:
-            print("Send this event to process", idx+1)
+            print("Send this event to process {0}".format(idx+1))
             return idx+1
         
+def determine_sender_process(ops_list, event_tag):
+    # Target events for sender processes
+    target_event = "s" + event_tag
+    target_bcast_event = "r" + event_tag
+    print("Target events: {0},{1}".format(target_event, target_bcast_event))
+    for idx in range(0, len(ops_list)):
+        if target_event in ops_list[idx]:
+            print("Received this event from process {0}".format(idx+1))
+            return idx+1
+        elif target_bcast_event in ops_list[idx]:
+            print("Received this event from a broadcast from {0}".format(idx+1))
+            return idx+1
+
 def process_loop(event_list, process_events):
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
@@ -48,11 +61,11 @@ def process_loop(event_list, process_events):
             print("Receive with tag:", recv_op.group(1))
             
             data = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
-
+            orig_idx = determine_sender_process(event_list, event_tag)
             print("Process {0} received {1} from process {2} @ {3}".format(
                 iproc, 
                 str(data["data"]),
-                "?",
+                orig_idx,
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
             
@@ -107,7 +120,8 @@ def main():
     #Send/receive (unicast)
     event_list = [
             "s1, a, b, r2", #Process 1
-            "r1, s2", #Process 2
+            "r1, s2, r3", #Process 2
+            "c, d, s3" #Process 3
     ]
     """
     #Send/receive (broadcast)
@@ -116,7 +130,7 @@ def main():
             "r1, s2, b, c", 
             "r1, d, e, r2"
     ]
-    
+
 
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
