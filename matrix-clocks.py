@@ -84,8 +84,8 @@ def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
     event_list = [
-            "s1, a", #Process 1
-            "r1", #Process 2
+            "s1, a, b, r2", #Process 1
+            "r1, s2", #Process 2
     ]
 
     if iproc == 0:
