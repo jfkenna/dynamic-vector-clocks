@@ -15,6 +15,18 @@ nproc = comm.Get_size()
 # Local process variables
 message_queue = []
 
+def broadcast_message(message, event_tag):
+    # Extract target processes (without root)
+    target_idx = [x for x in range(1, nproc) if x != iproc]
+    print("Process {0} broadcasting message to {1} @ {2} ".format(
+        iproc, 
+        target_idx,
+        datetime.now().strftime("%H:%M:%S.%f"), 
+    ))
+    # Develop the vector clock here, knowing target processes
+    for idx in target_idx:
+        comm.send(message, dest=idx, tag=int(event_tag))
+
 def determine_recv_process(ops_list, event_tag):
     target_event = "r" + event_tag
     print("Target event:", target_event)
@@ -30,6 +42,7 @@ def process_loop(event_list, process_events):
         print("Operation:", op)
         recv_op = re.search("^r([1-9].*)", op) # If the event was a receive
         send_op = re.search("^s([1-9].*)", op) # If the event was a send
+        bcast_op = re.search("^b([1-9].*)", op) # If the event was a broadcast
         internal_op = re.search("^([a-zA-Z].*)", op) # If the event was internal
         if recv_op:
             event_tag = recv_op.group(1)
@@ -63,6 +76,15 @@ def process_loop(event_list, process_events):
 
             # Send the message/UUID and VC to the destination process
             comm.send(message, dest=dest, tag=int(event_tag))
+        elif bcast_op:
+            event_tag = bcast_op.group(1)
+            print(event_tag)
+            uuid_gen = uuid.uuid4()
+            message = {
+                'data': uuid_gen,
+                'vc': []
+            }
+            broadcast_message(message, event_tag)
             
         elif internal_op:
             print("Process {0} internal op {1} @ {2}".format(
@@ -83,10 +105,20 @@ def process_loop(event_list, process_events):
 def main():
     vector_arr = numpy.zeros((nproc, nproc))
 
+    """
+    #Send/receive (unicast)
     event_list = [
             "s1, a, b, r2", #Process 1
             "r1, s2", #Process 2
     ]
+    """
+    #Send/receive (broadcast)
+    event_list = [
+            "a, b1",
+            "r1, s2, b, c", 
+            "r1, d, e, r2"
+    ]
+    
 
     if iproc == 0:
         print("Process {0} to deconstuct ops @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
@@ -154,4 +186,5 @@ https://stackoverflow.com/questions/1327369/extract-part-of-a-regex-match 30th M
 https://realpython.com/python-string-contains-substring/ 30th March
 https://pythonprinciples.com/blog/python-convert-string-to-int/#:~:text=To%20convert%20a%20string%20to%20an%20integer%2C%20use%20the%20built,an%20integer%20as%20its%20output. 30th March
 https://www.uuidgenerator.net/dev-corner/python 30th March
+https://www.w3schools.com/python/python_lists_comprehension.asp 30th
 '''
