@@ -38,9 +38,23 @@ def determine_recv_process(ops_list, event_tag):
             print("Send this event to process {0}".format(idx+1))
             return idx+1
 
+def generate_message():
+    process_id = iproc
+    # Generate a random float
+    r_float = random.uniform(0, 10)
+    # Construct a message
+    message = {
+        'number': r_float,
+        'vc': []
+    }
+    return message
+
 def process_loop(event_list, process_events):
     # Process n's vector array
     vector_arr = numpy.zeros((nproc-1, nproc-1))
+    # Process n's current main summed number 
+    number_sum = 0
+
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
         print("Event #{0} -> {1}".format(idx, event))
@@ -49,6 +63,7 @@ def process_loop(event_list, process_events):
         bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
         internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
         if recv_op:
+            recv_message = None
             event_tag = recv_op.group(1)
             print("Receive with tag:", recv_op.group(1))
 
@@ -58,49 +73,51 @@ def process_loop(event_list, process_events):
                 comm.Probe(tag=int(event_tag), status=s)
                 # If the message in the channel matches the tag this event requires
                 if str(s.tag) == event_tag:
-                    # Set orig_idx (process ID) and obtain the message
+                    # Set orig_idx (process ID) and obtain recv_message
                     orig_idx = s.tag
-                    data = comm.recv(source=s.tag, tag=int(event_tag))
+                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
                     break
-
-            print("Process {0} received {1} from process {2} @ {3}".format(
+        
+            print("Process {0} received number {1} from Process {2} @ {3}. Adding to {4}".format(
                 iproc, 
-                str(data["data"]),
+                str(recv_message["number"]),
                 orig_idx,
                 datetime.now().strftime("%H:%M:%S.%f"), 
+                str(number_sum)
+            ))
+
+            # Increment the number_sum with the received data
+            number_sum += recv_message["number"]
+
+            # Print the increment
+            print("After addition, Process {0} has number sum {1}".format(
+                iproc, 
+                str(number_sum)
             ))
             
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
             dest = determine_recv_process(event_list, event_tag)
-            uuid_gen = uuid.uuid4()
-            message = {
-                'data': uuid_gen,
-                'vc': []
-            }
+            message = generate_message()
 
-            print("Process {0} sending message with UUID {1} to {2} @ {3}".format(
+            print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
                 iproc, 
-                uuid_gen,
+                message["number"],
                 dest,
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
-            # Send the message/UUID and VC to the destination process
+            # Send the message(with generated floating point number and VC) to the destination process
             send_message(message, dest, event_tag)
 
         elif bcast_op:
             event_tag = bcast_op.group(1)
-            uuid_gen = uuid.uuid4()
-            message = {
-                'data': uuid_gen,
-                'vc': []
-            }
+            message = generate_message()
             broadcast_message(message, event_tag)
             
         elif internal_op:
-            print("Process {0} internal op {1} @ {2}".format(
+            print("Process {0} internal event {1} @ {2}".format(
                 iproc, 
                 internal_op.group(1),
                 datetime.now().strftime("%H:%M:%S.%f"), 
@@ -176,4 +193,5 @@ https://kodekloud.com/blog/bash-getopts/ 30th March
 https://linuxize.com/post/bash-functions/ 30th March
 https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-script 30th March
 https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
+https://pynative.com/python-get-random-float-numbers/ 1st April
 '''
