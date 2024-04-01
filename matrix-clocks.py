@@ -75,7 +75,7 @@ def process_loop(event_list, process_events):
                 if str(s.tag) == event_tag:
                     # Set orig_idx (process ID) and obtain recv_message
                     orig_idx = s.tag
-                    recv_message = comm.recv(source=s.tag, tag=int(event_tag))
+                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
                     break
         
             print("Process {0} received number {1} from Process {2} @ {3}. Adding to {4}".format(
