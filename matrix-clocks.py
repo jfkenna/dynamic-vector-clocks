@@ -36,20 +36,48 @@ def determine_recv_process(ops_list, event_tag, event_type):
         for idx in range(0, len(ops_list)):
             if target_event in ops_list[idx]:
                 print("Send this event to process {0}".format(idx+1))
-                return idx+1
+                return [idx+1]
     elif event_type == "broadcast":
         dest_processes = [x for x in range(1, nproc) if x != iproc]
         return dest_processes
 
-def generate_message():
-    process_id = iproc
+def construct_message_matrix_clock(destinations, process_matrix):
+    print("Generating matrix clock for Proces {0}, sending to {1}".format(
+        iproc,
+        destinations
+    ))
+
+    message_matrix_clock = process_matrix
+    sender_row = iproc - 1
+    for dest in destinations:
+        print("Incrementing row {0}, column {1} by 1".format(
+            sender_row,
+            dest-1
+        ))
+        message_matrix_clock[sender_row][dest-1] += 1
+        
+    # Inc
+    return message_matrix_clock
+
+def generate_message(destinations, process_matrix):
+    print("Process {0} generating MC for sending message to Process {1}. Initial MC of".format(
+        iproc,  
+        destinations
+    ))
+    print(process_matrix)
+    matrix_message = construct_message_matrix_clock(destinations, process_matrix)
     # Generate a random float
     r_float = generate_random_float()
     # Construct a message
     message = {
         'number': r_float,
-        'vc': []
+        'matrix_message': matrix_message
     }
+    print("Process {0} generated MC for sending message to Process {1}. Generated MC of:".format(
+        iproc,  
+        destinations
+    ))
+    print(matrix_message)
     return message
 
 def generate_random_float():
@@ -63,6 +91,7 @@ def process_loop(event_list, process_events):
 
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
+        print("----------")
         print("Event #{0} -> {1}".format(idx, event))
         recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
         send_op = re.search("^s([1-9].*)", event) # If the event was a send
@@ -92,6 +121,9 @@ def process_loop(event_list, process_events):
                 str(number_sum)
             ))
 
+            print("The received matrix clock with the message")
+            print(recv_message["matrix_message"])
+
             # Increment the number_sum with the received data
             number_sum += recv_message["number"]
 
@@ -105,23 +137,23 @@ def process_loop(event_list, process_events):
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
             destination_process = determine_recv_process(event_list, event_tag, "send")
-            message = generate_message()
+            message = generate_message(destination_process, process_matrix)
 
             print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
                 iproc, 
                 message["number"],
-                destination_process,
+                destination_process[0],
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
             # Send the message(with generated floating point number and VC) to the destination process
-            send_message(message, destination_process, event_tag)
+            send_message(message, destination_process[0], event_tag)
 
         elif bcast_op:
             event_tag = bcast_op.group(1)
             destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
-            message = generate_message()
-            
+            message = generate_message(destination_processes, process_matrix)
+
             print("Process {0} boradcasting message with generated number {1} to Processes {2} @ {3}".format(
                 iproc, 
                 message["number"],
@@ -162,6 +194,7 @@ def process_loop(event_list, process_events):
         elif re.match("^([a-zA-Z].*)", op):
             print( "Internal event:", op)
         """
+        print("----------")
 
 def event_list_from_file(file_loc):
     event_list = []
