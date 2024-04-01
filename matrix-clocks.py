@@ -41,6 +41,14 @@ def determine_recv_process(ops_list, event_tag, event_type):
         dest_processes = [x for x in range(1, nproc) if x != iproc]
         return dest_processes
 
+def maximum_matrix_values(matrix_a, matrix_b):
+    max_matrix = numpy.zeros((nproc-1, nproc-1))
+    for a in range(len(matrix_a)):
+        for b in range(len(matrix_b)):
+            max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])
+    return max_matrix
+
+
 def construct_message_matrix_clock(destinations, process_matrix):
     print("Generating matrix clock for Proces {0}, sending to {1}".format(
         iproc,
@@ -125,8 +133,8 @@ def process_loop(event_list, process_events):
             print(recv_message["matrix_message"])
 
             # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
-            process_matrix = recv_message["matrix_message"]
-
+            process_matrix = maximum_matrix_values(process_matrix, recv_message["matrix_message"])
+            
             # Increment the number_sum with the received data
             number_sum += recv_message["number"]
 
@@ -135,12 +143,16 @@ def process_loop(event_list, process_events):
                 iproc, 
                 str(number_sum)
             ))
+
+            print(process_matrix)
             
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
             destination_process = determine_recv_process(event_list, event_tag, "send")
             message = generate_message(destination_process, process_matrix)
+            # Obtain the max of the current process's matrix clock and the message
+            max_matrix = maximum_matrix_values(process_matrix, message["matrix_message"])
 
             print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
                 iproc, 
@@ -152,10 +164,14 @@ def process_loop(event_list, process_events):
             # Send the message(with generated floating point number and VC) to the destination process
             send_message(message, destination_process[0], event_tag)
 
+            print(process_matrix)
+
         elif bcast_op:
             event_tag = bcast_op.group(1)
             destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
             message = generate_message(destination_processes, process_matrix)
+            # Obtain the max of the current process's matrix clock and the message
+            max_matrix = maximum_matrix_values(process_matrix, message["matrix_message"]) 
 
             print("Process {0} boradcasting message with generated number {1} to Processes {2} @ {3}".format(
                 iproc, 
@@ -165,6 +181,8 @@ def process_loop(event_list, process_events):
             ))
            
             broadcast_message(message, event_tag, destination_processes)
+
+            print(process_matrix)
             
         elif internal_op:
             print("Process {0} internal event {1} @ {2}".format(
