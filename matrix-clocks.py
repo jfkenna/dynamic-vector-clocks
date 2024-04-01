@@ -280,4 +280,5 @@ https://linuxize.com/post/bash-functions/ 30th March
 https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-script 30th March
 https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 https://pynative.com/python-get-random-float-numbers/ 1st April
+https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
 '''
