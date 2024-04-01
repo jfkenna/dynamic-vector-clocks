@@ -114,6 +114,12 @@ def process_loop(event_list, process_events):
         elif bcast_op:
             event_tag = bcast_op.group(1)
             message = generate_message()
+            
+            print("Process {0} boradcasting message with generated number {1} to other Processes".format(
+                iproc, 
+                message["number"],
+            ))
+           
             broadcast_message(message, event_tag)
             
         elif internal_op:
