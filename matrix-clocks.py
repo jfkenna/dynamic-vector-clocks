@@ -124,6 +124,9 @@ def process_loop(event_list, process_events):
             print("The received matrix clock with the message")
             print(recv_message["matrix_message"])
 
+            # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
+            process_matrix = recv_message["matrix_message"]
+
             # Increment the number_sum with the received data
             number_sum += recv_message["number"]
 
