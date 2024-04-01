@@ -18,45 +18,88 @@ message_queue = []
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))
 
-def broadcast_message(message, event_tag):
+def broadcast_message(message, event_tag, dest_processes):
     # Extract target processes (without root)
-    target_idx = [x for x in range(1, nproc) if x != iproc]
     print("Process {0} broadcasting message to {1} @ {2} ".format(
         iproc, 
-        target_idx,
+        dest_processes,
         datetime.now().strftime("%H:%M:%S.%f"), 
     ))
-    # Develop the vector clock here, knowing target proce
-    for idx in target_idx:
+    # Develop the matrix clock here, knowing target proce
+    for idx in dest_processes:
         send_message(message, idx, event_tag)
 
-def determine_recv_process(ops_list, event_tag):
-    target_event = "r" + event_tag
-    print("Target event:", target_event)
-    for idx in range(0, len(ops_list)):
-        if target_event in ops_list[idx]:
-            print("Send this event to process {0}".format(idx+1))
-            return idx+1
+def determine_recv_process(ops_list, event_tag, event_type):
+    if event_type == "send":
+        target_event = "r" + event_tag
+        print("Target event:", target_event)
+        for idx in range(0, len(ops_list)):
+            if target_event in ops_list[idx]:
+                print("Send this event to process {0}".format(idx+1))
+                return [idx+1]
+    elif event_type == "broadcast":
+        dest_processes = [x for x in range(1, nproc) if x != iproc]
+        return dest_processes
 
-def generate_message():
-    process_id = iproc
+def maximum_matrix_values(matrix_a, matrix_b):
+    max_matrix = numpy.zeros((nproc-1, nproc-1))
+    for a in range(len(matrix_a)):
+        for b in range(len(matrix_b)):
+            max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])
+    return max_matrix
+
+
+def construct_message_matrix_clock(destinations, process_matrix):
+    print("Generating matrix clock for Proces {0}, sending to {1}".format(
+        iproc,
+        destinations
+    ))
+
+    message_matrix_clock = process_matrix
+    sender_row = iproc - 1
+    for dest in destinations:
+        print("Incrementing row {0}, column {1} by 1".format(
+            sender_row,
+            dest-1
+        ))
+        message_matrix_clock[sender_row][dest-1] += 1
+        
+    # Inc
+    return message_matrix_clock
+
+def generate_message(destinations, process_matrix):
+    print("Process {0} generating MC for sending message to Process {1}. Initial MC of".format(
+        iproc,  
+        destinations
+    ))
+    print(process_matrix)
+    matrix_message = construct_message_matrix_clock(destinations, process_matrix)
     # Generate a random float
-    r_float = random.uniform(0, 10)
+    r_float = generate_random_float()
     # Construct a message
     message = {
         'number': r_float,
-        'vc': []
+        'matrix_message': matrix_message
     }
+    print("Process {0} generated MC for sending message to Process {1}. Generated MC of:".format(
+        iproc,  
+        destinations
+    ))
+    print(matrix_message)
     return message
 
+def generate_random_float():
+    return random.uniform(0, 10)
+
 def process_loop(event_list, process_events):
-    # Process n's vector array
-    vector_arr = numpy.zeros((nproc-1, nproc-1))
+    # Process n's matrix
+    process_matrix = numpy.zeros((nproc-1, nproc-1))
     # Process n's current main summed number 
     number_sum = 0
 
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
+        print("----------")
         print("Event #{0} -> {1}".format(idx, event))
         recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
         send_op = re.search("^s([1-9].*)", event) # If the event was a send
@@ -86,6 +129,12 @@ def process_loop(event_list, process_events):
                 str(number_sum)
             ))
 
+            print("The received matrix clock with the message")
+            print(recv_message["matrix_message"])
+
+            # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
+            process_matrix = maximum_matrix_values(process_matrix, recv_message["matrix_message"])
+            
             # Increment the number_sum with the received data
             number_sum += recv_message["number"]
 
@@ -94,39 +143,69 @@ def process_loop(event_list, process_events):
                 iproc, 
                 str(number_sum)
             ))
+
+            print(process_matrix)
             
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
-            dest = determine_recv_process(event_list, event_tag)
-            message = generate_message()
+            destination_process = determine_recv_process(event_list, event_tag, "send")
+            message = generate_message(destination_process, process_matrix)
+            # Obtain the max of the current process's matrix clock and the message
+            max_matrix = maximum_matrix_values(process_matrix, message["matrix_message"])
 
             print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
                 iproc, 
                 message["number"],
-                dest,
+                destination_process[0],
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
             # Send the message(with generated floating point number and VC) to the destination process
-            send_message(message, dest, event_tag)
+            send_message(message, destination_process[0], event_tag)
+
+            print(process_matrix)
 
         elif bcast_op:
             event_tag = bcast_op.group(1)
-            message = generate_message()
-            
-            print("Process {0} boradcasting message with generated number {1} to other Processes".format(
+            destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
+            message = generate_message(destination_processes, process_matrix)
+            # Obtain the max of the current process's matrix clock and the message
+            max_matrix = maximum_matrix_values(process_matrix, message["matrix_message"]) 
+
+            print("Process {0} boradcasting message with generated number {1} to Processes {2} @ {3}".format(
                 iproc, 
                 message["number"],
+                destination_processes,
+                datetime.now().strftime("%H:%M:%S.%f"), 
             ))
            
-            broadcast_message(message, event_tag)
+            broadcast_message(message, event_tag, destination_processes)
+
+            print(process_matrix)
             
         elif internal_op:
             print("Process {0} internal event {1} @ {2}".format(
                 iproc, 
                 internal_op.group(1),
                 datetime.now().strftime("%H:%M:%S.%f"), 
+            ))
+
+            r_float = generate_random_float()
+
+            print("Process {0} generated number {1}. Adding to {2}".format(
+                iproc, 
+                str(r_float),
+                str(number_sum)
+            ))
+
+            # Increment the number_sum with the received data
+            number_sum += r_float
+
+            # Print the increment
+            print("After addition (internal event), Process {0} has number sum {1}".format(
+                iproc, 
+                str(number_sum)
             ))
         """
         # Send event
@@ -136,6 +215,7 @@ def process_loop(event_list, process_events):
         elif re.match("^([a-zA-Z].*)", op):
             print( "Internal event:", op)
         """
+        print("----------")
 
 def event_list_from_file(file_loc):
     event_list = []
@@ -200,4 +280,5 @@ https://linuxize.com/post/bash-functions/ 30th March
 https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-script 30th March
 https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 https://pynative.com/python-get-random-float-numbers/ 1st April
+https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
 '''
