@@ -138,20 +138,32 @@ def check_message_queue(process_matrix, number_sum, message_queue):
     print("The current message queue")
     print(message_queue)
 
-    if len(message_queue) >= 1:
-        print("Need to check if we can deliver messages")
-        iterator = 0
-        while iterator < len(message_queue):
-            queued_message = message_queue[iterator]
-            print("Grabbing index {0} of the message queue")
-            print(message_queue[iterator])
-            if can_deliver_message(current_matrix, queued_message):
-                current_matrix, current_number_sum = deliver_message(process_matrix, current_number_sum, queued_message)
-                print(current_matrix)
-                iterator = 0
+    iterating = True
+    iterator = 0
+
+    while iterating:
+        if len(message_queue) >= 1:
+            print("Need to check if we can deliver messages")
+            if iterator == len(message_queue):
+                print("Exhausted all messages. Breaking")
+                break
             else:
-                # Move to the next iteration
-                iterator += 1
+                queued_message = message_queue[iterator]
+                print("Grabbing index {0} of the message queue")
+                print(message_queue[iterator])
+                if can_deliver_message(current_matrix, queued_message):
+                    current_matrix, current_number_sum = deliver_message(process_matrix, current_number_sum, queued_message)
+                    message_queue.pop(iterator)
+                    # Reset iterator to 0
+                    iterator = 0
+                else:
+                    # Move to the next iteration
+                    iterator += 1
+        else:
+            print("No messages in the queue")
+            break
+
+    return current_matrix, current_number_sum
 
 def process_loop(event_list, process_events):
     # Process n's matrix
@@ -203,7 +215,7 @@ def process_loop(event_list, process_events):
                 print("This message will to be enqueued for later delivery")
                 message_queue.append(recv_message)
 
-            check_message_queue(process_matrix, number_sum, message_queue)
+            process_matrix, number_sum = check_message_queue(process_matrix, number_sum, message_queue)
 
         elif send_op:
             event_tag = send_op.group(1)
@@ -342,4 +354,5 @@ https://pynative.com/python-get-random-float-numbers/ 1st April
 https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
 https://note.nkmk.me/en/python-function-return-multiple-values/ 2nd April
 https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array 2nd April
+https://www.w3schools.com/python/gloss_python_array_remove.asp 2nd April
 '''
