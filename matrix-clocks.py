@@ -106,6 +106,46 @@ def deliver_message(current_matrix, current_number_sum, recv_message):
 
     return new_matrix, new_number_sum
 
+def can_deliver_message(current_matrix, message):
+    print("The received matrix clock")
+    print(message["matrix_message"])
+    print("The current matrix clock")
+    print(current_matrix)
+
+    message_matrix = message["matrix_message"]
+    recv_process_index = iproc - 1
+    sending_process_index = message["sender"]-1
+    print("The received matrix clock of Process {0} (index {1}) with the message from Process {2} (index {3})".format(
+        iproc,
+        recv_process_index,
+        message["sender"],
+        sending_process_index
+    ))
+    message_matrix_column = message_matrix[:,recv_process_index]
+    process_matrix_column = current_matrix[:,recv_process_index]
+    
+    # If the value of the i,j value of the row (sender)/column (receiver) is one LESS than the current process's i,j value 
+    message_value_valid = message_matrix_column[sending_process_index] - 1 == process_matrix_column[sending_process_index]
+    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
+    other_indexes_valid = True
+    for x in range(nproc-1):
+        if x == sending_process_index:
+            continue
+        else:
+            if not process_matrix_column[x] >= message_matrix_column[x]:
+                print("This is invalid - we need to queue this message!")
+                other_indexes_valid = False
+                break
+
+    can_deliver = message_value_valid and other_indexes_valid
+    print(can_deliver)
+    # If all other i,j in the receiver's column 
+
+    print("Message:", message_matrix_column)
+    print("Process:", process_matrix_column)
+ 
+
+
 def process_loop(event_list, process_events):
     # Process n's matrix
     process_matrix = numpy.zeros((nproc-1, nproc-1))
@@ -144,8 +184,7 @@ def process_loop(event_list, process_events):
                 str(number_sum)
             ))
 
-            print("The received matrix clock with the message")
-            print(recv_message["matrix_message"])
+            can_deliver_message(process_matrix, recv_message)
 
             # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
             process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
