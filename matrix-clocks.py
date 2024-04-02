@@ -131,7 +131,7 @@ def can_deliver_message(current_matrix, message):
     can_deliver = message_value_valid and other_indexes_valid
     return can_deliver
 
-def check_message_queue(process_matrix, number_sum, message_queue):
+def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
     current_matrix = process_matrix
     current_number_sum = number_sum
 
@@ -147,6 +147,9 @@ def check_message_queue(process_matrix, number_sum, message_queue):
             if iterator == len(message_queue):
                 print("Exhausted all messages. Breaking")
                 break
+            elif message_queue[iterator] == recv_message:
+                print("This was the message that was just added - skip it")
+                iterator += 1 
             else:
                 queued_message = message_queue[iterator]
                 print("Grabbing index {0} of the message queue")
@@ -215,7 +218,9 @@ def process_loop(event_list, process_events):
                 print("This message will to be enqueued for later delivery")
                 message_queue.append(recv_message)
 
-            process_matrix, number_sum = check_message_queue(process_matrix, number_sum, message_queue)
+            process_matrix, number_sum = check_message_queue(process_matrix, number_sum, message_queue, recv_message)
+
+            print(process_matrix)
 
         elif send_op:
             event_tag = send_op.group(1)
