@@ -134,6 +134,7 @@ def can_deliver_message(current_matrix, message):
 def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
     current_matrix = process_matrix
     current_number_sum = number_sum
+    first_pass = True
 
     print("The current message queue")
     print(message_queue)
@@ -147,8 +148,8 @@ def check_message_queue(process_matrix, number_sum, message_queue, recv_message)
             if iterator == len(message_queue):
                 print("Exhausted all messages. Breaking")
                 break
-            elif message_queue[iterator] == recv_message:
-                print("This was the message that was just added - skip it")
+            elif message_queue[iterator] == recv_message and first_pass:
+                print("This was the message that was just added - skip it only on the first pass")
                 iterator += 1 
             else:
                 queued_message = message_queue[iterator]
@@ -159,6 +160,7 @@ def check_message_queue(process_matrix, number_sum, message_queue, recv_message)
                     message_queue.pop(iterator)
                     # Reset iterator to 0
                     iterator = 0
+                    first_pass = False
                 else:
                     # Move to the next iteration
                     iterator += 1
