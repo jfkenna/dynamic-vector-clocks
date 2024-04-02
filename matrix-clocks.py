@@ -12,9 +12,6 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
-# Local process variables
-message_queue = []
-
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))
 
@@ -78,6 +75,7 @@ def generate_message(destinations, process_matrix):
     r_float = generate_random_float()
     # Construct a message
     message = {
+        'sender': iproc,
         'number': r_float,
         'matrix_message': matrix_message
     }
@@ -91,11 +89,55 @@ def generate_message(destinations, process_matrix):
 def generate_random_float():
     return random.uniform(0, 10)
 
+def deliver_message(current_matrix, current_number_sum, recv_message):
+    new_matrix = maximum_matrix_values(current_matrix, recv_message["matrix_message"])
+    
+    # Increment the number_sum with the received data
+    new_number_sum = current_number_sum + recv_message["number"]
+
+    # Print the increment
+    print("After addition, Process {0} has number sum {1}".format(
+        iproc, 
+        str(new_number_sum)
+    ))
+
+    return new_matrix, new_number_sum
+
+def can_deliver_message(current_matrix, message):
+    message_matrix = message["matrix_message"]
+    recv_process_index = iproc - 1
+    sending_process_index = message["sender"]-1
+    print("The received matrix clock of Process {0} (index {1}) with the message from Process {2} (index {3})".format(
+        iproc,
+        recv_process_index,
+        message["sender"],
+        sending_process_index
+    ))
+
+    message_matrix_column = message_matrix[:,recv_process_index]
+    process_matrix_column = current_matrix[:,recv_process_index]
+    
+    # If the value of the i,j value of the row (sender)/column (receiver) is one LESS than the current process's i,j value 
+    message_value_valid = message_matrix_column[sending_process_index] - 1 == process_matrix_column[sending_process_index]
+    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
+    other_indexes_valid = True
+    for x in range(nproc-1):
+        if not x == sending_process_index: # Checking all indexes not of the sender
+            if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
+                print("This is invalid - we need to queue this message!")
+                other_indexes_valid = False
+                break
+
+    can_deliver = message_value_valid and other_indexes_valid
+    return can_deliver
+
 def process_loop(event_list, process_events):
     # Process n's matrix
     process_matrix = numpy.zeros((nproc-1, nproc-1))
     # Process n's current main summed number 
     number_sum = 0
+    # Process n's message queue
+    message_queue = []
 
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
@@ -129,23 +171,20 @@ def process_loop(event_list, process_events):
                 str(number_sum)
             ))
 
-            print("The received matrix clock with the message")
-            print(recv_message["matrix_message"])
+            if can_deliver_message(process_matrix, recv_message):
+                # Update the process's matrix clock and number sum by delivering the message
+                process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
+                
+                print("Process {0}'s matrix clock after delivery".format(iproc))
+                print(process_matrix)
+                # TODO: Check for other messages that can be delivered here?
+                print(message_queue)
+            else:
+                print("This message will to be enqueued for later delivery")
+                message_queue.append(recv_message)
+                print(message_queue)
 
-            # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
-            process_matrix = maximum_matrix_values(process_matrix, recv_message["matrix_message"])
-            
-            # Increment the number_sum with the received data
-            number_sum += recv_message["number"]
 
-            # Print the increment
-            print("After addition, Process {0} has number sum {1}".format(
-                iproc, 
-                str(number_sum)
-            ))
-
-            print(process_matrix)
-            
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
@@ -281,4 +320,6 @@ https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-scri
 https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 https://pynative.com/python-get-random-float-numbers/ 1st April
 https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
+https://note.nkmk.me/en/python-function-return-multiple-values/ 2nd April
+https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array 2nd April
 '''
