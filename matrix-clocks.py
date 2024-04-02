@@ -12,9 +12,6 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
-# Local process variables
-message_queue = []
-
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))
 
@@ -107,11 +104,6 @@ def deliver_message(current_matrix, current_number_sum, recv_message):
     return new_matrix, new_number_sum
 
 def can_deliver_message(current_matrix, message):
-    print("The received matrix clock")
-    print(message["matrix_message"])
-    print("The current matrix clock")
-    print(current_matrix)
-
     message_matrix = message["matrix_message"]
     recv_process_index = iproc - 1
     sending_process_index = message["sender"]-1
@@ -121,6 +113,7 @@ def can_deliver_message(current_matrix, message):
         message["sender"],
         sending_process_index
     ))
+
     message_matrix_column = message_matrix[:,recv_process_index]
     process_matrix_column = current_matrix[:,recv_process_index]
     
@@ -129,29 +122,23 @@ def can_deliver_message(current_matrix, message):
     # Other columns of the process's matrix clock (not sender row) is >= the messages's values
     other_indexes_valid = True
     for x in range(nproc-1):
-        if x == sending_process_index:
-            continue
-        else:
-            if not process_matrix_column[x] >= message_matrix_column[x]:
+        if not x == sending_process_index: # Checking all indexes not of the sender
+            if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
                 print("This is invalid - we need to queue this message!")
                 other_indexes_valid = False
                 break
 
     can_deliver = message_value_valid and other_indexes_valid
-    print(can_deliver)
-    # If all other i,j in the receiver's column 
-
-    print("Message:", message_matrix_column)
-    print("Process:", process_matrix_column)
- 
-
+    return can_deliver
 
 def process_loop(event_list, process_events):
     # Process n's matrix
     process_matrix = numpy.zeros((nproc-1, nproc-1))
     # Process n's current main summed number 
     number_sum = 0
-
+    # Process n's message queue
+    message_queue = []
+    
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
         print("----------")
@@ -184,13 +171,16 @@ def process_loop(event_list, process_events):
                 str(number_sum)
             ))
 
-            can_deliver_message(process_matrix, recv_message)
-
-            # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
-            process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
-            
-            print("Received matrix clock after delivery")
-            print(process_matrix)
+            if can_deliver_message(process_matrix, recv_message):
+                # Update the process's matrix clock and number sum by delivering the message
+                process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
+                
+                print("Process {0}'s matrix clock after delivery".format(iproc))
+                print(process_matrix)
+            else:
+                print("This message will to be enqueued for later delivery")
+                message_queue.append(recv_message)
+                print(message_queue)
 
 
         elif send_op:
@@ -329,4 +319,5 @@ https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 https://pynative.com/python-get-random-float-numbers/ 1st April
 https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
 https://note.nkmk.me/en/python-function-return-multiple-values/ 2nd April
+https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array 2nd April
 '''
