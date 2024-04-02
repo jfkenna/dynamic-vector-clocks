@@ -78,6 +78,7 @@ def generate_message(destinations, process_matrix):
     r_float = generate_random_float()
     # Construct a message
     message = {
+        'sender': iproc,
         'number': r_float,
         'matrix_message': matrix_message
     }
@@ -90,6 +91,20 @@ def generate_message(destinations, process_matrix):
 
 def generate_random_float():
     return random.uniform(0, 10)
+
+def deliver_message(current_matrix, current_number_sum, recv_message):
+    new_matrix = maximum_matrix_values(current_matrix, recv_message["matrix_message"])
+    
+    # Increment the number_sum with the received data
+    new_number_sum = current_number_sum + recv_message["number"]
+
+    # Print the increment
+    print("After addition, Process {0} has number sum {1}".format(
+        iproc, 
+        str(new_number_sum)
+    ))
+
+    return new_matrix, new_number_sum
 
 def process_loop(event_list, process_events):
     # Process n's matrix
@@ -133,19 +148,12 @@ def process_loop(event_list, process_events):
             print(recv_message["matrix_message"])
 
             # Store the matrix clock (TODO: This is a "delivery", we need to "check" the matrix for the jth column of this process)
-            process_matrix = maximum_matrix_values(process_matrix, recv_message["matrix_message"])
+            process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
             
-            # Increment the number_sum with the received data
-            number_sum += recv_message["number"]
-
-            # Print the increment
-            print("After addition, Process {0} has number sum {1}".format(
-                iproc, 
-                str(number_sum)
-            ))
-
+            print("Received matrix clock after delivery")
             print(process_matrix)
-            
+
+
         elif send_op:
             event_tag = send_op.group(1)
             print("Send with tag:", send_op.group(1))
@@ -281,4 +289,5 @@ https://stackoverflow.com/questions/6348902/how-can-i-add-numbers-in-a-bash-scri
 https://www.geeksforgeeks.org/command-line-arguments-in-python/ 30th March
 https://pynative.com/python-get-random-float-numbers/ 1st April
 https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
+https://note.nkmk.me/en/python-function-return-multiple-values/ 2nd April
 '''
