@@ -138,7 +138,7 @@ def process_loop(event_list, process_events):
     number_sum = 0
     # Process n's message queue
     message_queue = []
-    
+
     print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
         print("----------")
@@ -177,6 +177,8 @@ def process_loop(event_list, process_events):
                 
                 print("Process {0}'s matrix clock after delivery".format(iproc))
                 print(process_matrix)
+                # TODO: Check for other messages that can be delivered here?
+                print(message_queue)
             else:
                 print("This message will to be enqueued for later delivery")
                 message_queue.append(recv_message)
