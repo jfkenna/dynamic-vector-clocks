@@ -131,6 +131,45 @@ def can_deliver_message(current_matrix, message):
     can_deliver = message_value_valid and other_indexes_valid
     return can_deliver
 
+def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
+    current_matrix = process_matrix
+    current_number_sum = number_sum
+    first_pass = True
+
+    print("The current message queue")
+    print(message_queue)
+
+    iterating = True
+    iterator = 0
+
+    while iterating:
+        if len(message_queue) >= 1:
+            print("Need to check if we can deliver messages")
+            if iterator == len(message_queue):
+                print("Exhausted all messages. Breaking")
+                break
+            elif message_queue[iterator] == recv_message and first_pass:
+                print("This was the message that was just added - skip it only on the first pass")
+                iterator += 1 
+            else:
+                queued_message = message_queue[iterator]
+                print("Grabbing index {0} of the message queue")
+                print(message_queue[iterator])
+                if can_deliver_message(current_matrix, queued_message):
+                    current_matrix, current_number_sum = deliver_message(process_matrix, current_number_sum, queued_message)
+                    message_queue.pop(iterator)
+                    # Reset iterator to 0
+                    iterator = 0
+                    first_pass = False
+                else:
+                    # Move to the next iteration
+                    iterator += 1
+        else:
+            print("No messages in the queue")
+            break
+
+    return current_matrix, current_number_sum
+
 def process_loop(event_list, process_events):
     # Process n's matrix
     process_matrix = numpy.zeros((nproc-1, nproc-1))
@@ -177,13 +216,13 @@ def process_loop(event_list, process_events):
                 
                 print("Process {0}'s matrix clock after delivery".format(iproc))
                 print(process_matrix)
-                # TODO: Check for other messages that can be delivered here?
-                print(message_queue)
             else:
                 print("This message will to be enqueued for later delivery")
                 message_queue.append(recv_message)
-                print(message_queue)
 
+            process_matrix, number_sum = check_message_queue(process_matrix, number_sum, message_queue, recv_message)
+
+            print(process_matrix)
 
         elif send_op:
             event_tag = send_op.group(1)
@@ -322,4 +361,5 @@ https://pynative.com/python-get-random-float-numbers/ 1st April
 https://stackoverflow.com/questions/16548668/iterating-over-a-2-dimensional-python-list 1st April
 https://note.nkmk.me/en/python-function-return-multiple-values/ 2nd April
 https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array 2nd April
+https://www.w3schools.com/python/gloss_python_array_remove.asp 2nd April
 '''
