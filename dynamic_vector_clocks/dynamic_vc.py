@@ -62,46 +62,19 @@ def construct_message_dvc(destinations, process_dvc):
     return message_dvc
 
 def merge_dvcs(message_dvc, message_iproc, process_dvc):
-    # Add the DVC to the process's DVC (if not existing), else 
-    print("---proc---")
-    print(process_dvc)
-    print("From process {0}".format(message_iproc))
-    print("---msg---")
-    print(message_dvc)
+    # Create a new process DVC that will mutate based on what it has seen before, or append with
     new_process_dvc = process_dvc
-    # Check if the receiver has a VC for the sending process
-    recv_iproc_before = False
-    print("checking rows")
-    for row in process_dvc:
-        if row[0] == message_iproc:
-            recv_iproc_before = True
-            break
-    if not recv_iproc_before:
-        print("{0} hasnt heard from {1} before".format(
-            iproc,
-            message_iproc
-        ))
-        # Extract message_iproc's row
-        message_iproc_vc = None
-        for row in message_dvc:
-            if row[0] == message_iproc:
-                message_iproc_vc = row
+    # For each row in the message DVC
+    for row_m in message_dvc:
+        seen_row_m = False                          # Seen message row boolean
+        for row_p in new_process_dvc:               # For each row in the process DVC
+            if row_m[0] == row_p[0]:                # If the message's row is a index that the receiver process has seen
+                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)
+                seen_row_m = True                   # The process has seen it now, break off
                 break
-        # Add this new row to process_dvc
-        new_process_dvc.append(message_iproc_vc)
-        print(new_process_dvc)
-    else:
-        print("{0} has heard from {1} before".format(
-            iproc,
-            message_iproc
-        ))
-        #For each row in the message dvc - take the max with the process DVC
-        for row_m in message_dvc:
-            for row_p in new_process_dvc:
-                if row_m[0] == row_p[0]: row_p[1] = max(row_m[1], row_p[1])
-    # Increment no matter the merging or maxing
-    increment_dvc(new_process_dvc)
-    print(new_process_dvc)
+        if not seen_row_m:                          # If the message DVC's row is new to the receiver
+            new_process_dvc.append(row_m)           # Add this row to new_process_dvc
+    increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
     return new_process_dvc
 
 def generate_message(destinations, process_dvc):
@@ -258,6 +231,8 @@ def process_loop(event_list, process_events):
             message_dvc = recv_message["message_dvc"]
             message_iproc = recv_message["sender"]
             process_dvc = merge_dvcs(message_dvc, message_iproc, process_dvc)
+            print("After receiving, process_dvc")
+            print(process_dvc)
          
         elif send_op: # If the event was a send
             print("Send event")
