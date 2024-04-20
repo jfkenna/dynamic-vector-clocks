@@ -190,20 +190,29 @@ def process_loop(event_list, process_events):
         bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
         internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
 
-        if recv_op: 
+        if recv_op: # If the event was a receive
             print("recv")
-        elif send_op:
+
+        elif send_op: # If the event was a send
             print("send op")
 
-        elif bcast_op:
+        elif bcast_op: # If the event was a broadcast
             print("bcase op")
             
-        elif internal_op:
+        elif internal_op: # If the event was internal
             print("Process {0} internal event {1} @ {2}".format(
                 iproc, 
                 internal_op.group(1),
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
+
+            # Increment own VC within the DVC
+            for vc in process_dvc:
+                if vc[0] == iproc: # Obtain this process's VC within the DVC
+                    vc[1] += 1 # Increment by 1
+                    break # Exit the loop
+
+            print(process_dvc)
         print("----------")
 
 def event_list_from_file(file_loc):
