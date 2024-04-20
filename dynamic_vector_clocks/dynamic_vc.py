@@ -193,13 +193,33 @@ def process_loop(event_list, process_events):
             event_tag = recv_op.group(1)
             print("Receive with tag:", event_tag)
 
+           # Probe for messages, and obtain message from channel should one be sent
+            while True:
+                s = MPI.Status()
+                comm.Probe(tag=int(event_tag), status=s)
+                # If the message in the channel matches the tag this event requires
+                if str(s.tag) == event_tag:
+                    # Set orig_idx (process ID) and obtain recv_message
+                    orig_idx = s.tag
+                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
+                    print("got")
+                    break
+            
+            print("Process {0} received number {1} from Process {2} @ {3}. Adding to {4}. DVC is".format(
+                iproc, 
+                str(recv_message["number"]),
+                str(recv_message["sender"]),
+                datetime.now().strftime("%H:%M:%S.%f"), 
+                str(number_sum)
+            ))
+            print(recv_message["message_dvc"])
          
         elif send_op: # If the event was a send
             print("Send event")
             event_tag = send_op.group(1) # Obtain the send tag to add to the message
             print("Send with tag:", event_tag)
             destination_process = determine_recv_process(event_list, event_tag, "send")
-            print("Send this event to process {0}".format(idx+1))
+            print("Send this event to process {0}".format(destination_process))
             message = generate_message(destination_process, process_dvc)
             
             print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
