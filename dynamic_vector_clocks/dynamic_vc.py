@@ -254,6 +254,20 @@ def process_loop(event_list, process_events):
 
         elif bcast_op: # If the event was a broadcast
             print("Broadcast event")
+            event_tag = bcast_op.group(1)
+            print("Send with tag:", event_tag)
+            destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
+            print("Send this broadcast to process {0}".format(destination_processes))
+            message = generate_message(destination_processes, process_dvc)
+
+            print("Process {0} boradcasting message with generated number {1} to Processes {2} @ {3}".format(
+                iproc, 
+                message["number"],
+                destination_processes,
+                datetime.now().strftime("%H:%M:%S.%f"), 
+            ))
+           
+            broadcast_message(message, event_tag, destination_processes)
             
         elif internal_op: # If the event was internal
             print("Process {0} internal event {1} @ {2}".format(
