@@ -89,7 +89,6 @@ def merge_dvcs(message_dvc, message_iproc, process_dvc):
                 break
         # Add this new row to process_dvc
         new_process_dvc.append(message_iproc_vc)
-        increment_dvc(new_process_dvc)
         print(new_process_dvc)
     else:
         print("{0} has heard from {1} before".format(
@@ -99,16 +98,10 @@ def merge_dvcs(message_dvc, message_iproc, process_dvc):
         #For each row in the message dvc - take the max with the process DVC
         for row_m in message_dvc:
             for row_p in new_process_dvc:
-                if row_m[0] == row_p[0]:
-                    print("Comparing message: {0} and process: {1} for: {2}".format(
-                        row_m[1],
-                        row_p[1],
-                        row_m[0]
-                    ))
-                    row_p[1] = max(row_m[1], row_p[1])
-        # Finally, increment the receive
-        increment_dvc(new_process_dvc)
-        print(new_process_dvc)
+                if row_m[0] == row_p[0]: row_p[1] = max(row_m[1], row_p[1])
+    # Increment no matter the merging or maxing
+    increment_dvc(new_process_dvc)
+    print(new_process_dvc)
     return new_process_dvc
 
 def generate_message(destinations, process_dvc):
