@@ -1,5 +1,5 @@
 from mpi4py import MPI
-import numpy
+import numpy as np
 from datetime import datetime
 import random
 from time import sleep
@@ -60,6 +60,38 @@ def construct_message_dvc(destinations, process_dvc):
     message_dvc = increment_dvc(process_dvc)
     # Return the incremented DVC
     return message_dvc
+
+def merge_dvcs(message_dvc, message_iproc, process_dvc):
+    # Add the DVC to the process's DVC (if not existing), else 
+    print("---proc---")
+    print(process_dvc)
+    print("From process {0}".format(message_iproc))
+    print("---msg---")
+    print(message_dvc)
+    new_process_dvc = process_dvc
+    # Check if the receiver has a VC for the sending process
+    recv_iproc_before = False
+    print("checking rows")
+    for row in process_dvc:
+        if row[0] == message_iproc:
+            recv_iproc_before = True
+            break
+    if not recv_iproc_before:
+        print("{0} hasnt heard from {1} before".format(
+            iproc,
+            message_iproc
+        ))
+        # Extract message_iproc's row
+        message_iproc_vc = None
+        for row in message_dvc:
+            if row[0] == message_iproc:
+                message_iproc_vc = row
+                break
+        # Add this new row to process_dvc
+        new_process_dvc.append(message_iproc_vc)
+        increment_dvc(new_process_dvc)
+        print(new_process_dvc)
+    return new_process_dvc
 
 def generate_message(destinations, process_dvc):
     print("Process {0} generating message/updated DVC to destinations {1}. Initial DVC of".format(
@@ -212,7 +244,9 @@ def process_loop(event_list, process_events):
                 datetime.now().strftime("%H:%M:%S.%f"), 
                 str(number_sum)
             ))
-            print(recv_message["message_dvc"])
+            message_dvc = recv_message["message_dvc"]
+            message_iproc = recv_message["sender"]
+            process_dvc = merge_dvcs(message_dvc, message_iproc, process_dvc)
          
         elif send_op: # If the event was a send
             print("Send event")
