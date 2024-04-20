@@ -44,6 +44,12 @@ def maximum_matrix_values(matrix_a, matrix_b):
             max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])
     return max_matrix
 
+def increment_dvc(dvc):
+    for vc in dvc:
+        if vc[0] == iproc: # Obtain this process's VC within the DVC
+            vc[1] += 1 # Increment by 1
+            break # Exit the loop
+    return dvc
 
 def construct_message_dvc(destinations, process_dvc):
     print("Generating DVC to include in message. From process {0} to {1}".format(
@@ -51,13 +57,7 @@ def construct_message_dvc(destinations, process_dvc):
         destinations
     ))
 
-    message_dvc = process_dvc
-
-    for vc in message_dvc:
-        if vc[0] == iproc: # Obtain this process's VC within the DVC
-            vc[1] += 1 # Increment by 1
-            break # Exit the loop
-
+    message_dvc = increment_dvc(process_dvc)
     # Return the incremented DVC
     return message_dvc
 
@@ -223,12 +223,9 @@ def process_loop(event_list, process_events):
             ))
 
             # Increment own VC within the DVC
-            for vc in process_dvc:
-                if vc[0] == iproc: # Obtain this process's VC within the DVC
-                    vc[1] += 1 # Increment by 1
-                    break # Exit the loop
-
+            process_dvc = increment_dvc(process_dvc)
             print(process_dvc)
+
         print("----------")
 
 def event_list_from_file(file_loc):
