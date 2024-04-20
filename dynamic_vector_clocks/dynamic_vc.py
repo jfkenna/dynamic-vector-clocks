@@ -29,10 +29,9 @@ def broadcast_message(message, event_tag, dest_processes):
 def determine_recv_process(ops_list, event_tag, event_type):
     if event_type == "send":
         target_event = "r" + event_tag
-        print("Target event:", target_event)
+        print("Looking for target receive event:", target_event)
         for idx in range(0, len(ops_list)):
             if target_event in ops_list[idx]:
-                print("Send this event to process {0}".format(idx+1))
                 return [idx+1]
     elif event_type == "broadcast":
         dest_processes = [x for x in range(1, nproc) if x != iproc]
@@ -46,44 +45,42 @@ def maximum_matrix_values(matrix_a, matrix_b):
     return max_matrix
 
 
-def construct_message_matrix_clock(destinations, process_matrix):
-    print("Generating matrix clock for Proces {0}, sending to {1}".format(
+def construct_message_dvc(destinations, process_dvc):
+    print("Generating DVC to include in message. From process {0} to {1}".format(
         iproc,
         destinations
     ))
 
-    message_matrix_clock = process_matrix
-    sender_row = iproc - 1
-    for dest in destinations:
-        print("Incrementing row {0}, column {1} by 1".format(
-            sender_row,
-            dest-1
-        ))
-        message_matrix_clock[sender_row][dest-1] += 1
-        
-    # Inc
-    return message_matrix_clock
+    message_dvc = process_dvc
 
-def generate_message(destinations, process_matrix):
-    print("Process {0} generating MC for sending message to Process {1}. Initial MC of".format(
+    for vc in message_dvc:
+        if vc[0] == iproc: # Obtain this process's VC within the DVC
+            vc[1] += 1 # Increment by 1
+            break # Exit the loop
+
+    # Return the incremented DVC
+    return message_dvc
+
+def generate_message(destinations, process_dvc):
+    print("Process {0} generating message/updated DVC to destinations {1}. Initial DVC of".format(
         iproc,  
         destinations
     ))
-    print(process_matrix)
-    matrix_message = construct_message_matrix_clock(destinations, process_matrix)
+    print(process_dvc)
+    message_dvc = construct_message_dvc(destinations, process_dvc)
     # Generate a random float
     r_float = generate_random_float()
     # Construct a message
     message = {
         'sender': iproc,
         'number': r_float,
-        'matrix_message': matrix_message
+        'message_dvc': message_dvc
     }
-    print("Process {0} generated MC for sending message to Process {1}. Generated MC of:".format(
+    print("Process {0} generated DVC and message heading for Process {1}. Generated DVC of:".format(
         iproc,  
         destinations
     ))
-    print(matrix_message)
+    print(message_dvc)
     return message
 
 def generate_random_float():
@@ -191,13 +188,32 @@ def process_loop(event_list, process_events):
         internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
 
         if recv_op: # If the event was a receive
-            print("recv")
+            print("Receive event")
+            recv_message = None
+            event_tag = recv_op.group(1)
+            print("Receive with tag:", event_tag)
 
+         
         elif send_op: # If the event was a send
-            print("send op")
+            print("Send event")
+            event_tag = send_op.group(1) # Obtain the send tag to add to the message
+            print("Send with tag:", event_tag)
+            destination_process = determine_recv_process(event_list, event_tag, "send")
+            print("Send this event to process {0}".format(idx+1))
+            message = generate_message(destination_process, process_dvc)
+            
+            print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
+                iproc, 
+                message["number"],
+                destination_process[0],
+                datetime.now().strftime("%H:%M:%S.%f"), 
+            ))
+
+             # Send the message(with generated floating point number and DVC) to the destination process
+            send_message(message, destination_process[0], event_tag)
 
         elif bcast_op: # If the event was a broadcast
-            print("bcase op")
+            print("Broadcast event")
             
         elif internal_op: # If the event was internal
             print("Process {0} internal event {1} @ {2}".format(
