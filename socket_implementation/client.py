@@ -1,31 +1,37 @@
-import socket
 from threading import Thread
 from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
+from shared.message import constructJsonMessage, parseJsonMessage, MessageType
+import socket
 
 #doesn't really need to be a function, just here in case we want to
 #move some lifecycle stuff here later
 def acceptWorker(taskQueue, serverSocket):
-    print('Started accept worker')
+    print('[a0] Started')
     while True:
         taskQueue.put(serverSocket.accept())
+        print('[a0] Accepted connection')
 
 
-def networkWorker(taskQueue):
-    print('Started network worker')
+def networkWorker(taskQueue, id):
+    print('[w{0}] Started'.format(id))
     while True:
-        connection = taskQueue.get()
-        
-        #TODO read from connection
-        message = 'TODO'
+        connection, adr = taskQueue.get()
+        #TODO properly read multiple datagrams until seperator is reached
+        #for now, just assume total message size will be < 1024
+        data = connection.recv(1024)
+        message = parseJsonMessage(data)
+        print('[w{0}] Recieved message {1}'.format(id, message))
+        if message == None:
+            print('[w{0}] Parse error')
+            continue
         handleMessage(message)
 
 
 def handleMessage(message):
-    #TODO
-    print("updating vector clock...")
-    print("updating message display")
+    #TODO logic for updating clock, displaying messages etc.
+    return
 
 def validateEnv(env):
 
@@ -60,12 +66,13 @@ def main():
     acceptThread.start()
 
     #worker threads
-    #if we start getting issues, we can swap to a standard thread pool
-    #sometimes the executor can hide exceptions / warnings
-    with ThreadPoolExecutor(max_workers=int(env['CLIENT_WORKER_THREADS'])) as executor:
-        executor.map(networkWorker, [taskQueue for i in range(0, int(env['CLIENT_WORKER_THREADS']))])
+    workerThreads = []
+    for i in range(0, int(env['CLIENT_WORKER_THREADS'])):
+        worker = Thread(target=networkWorker, args=(taskQueue, i))
+        worker.start()
 
     acceptThread.join()
+    workerThreads.join()
 
 
 main()
