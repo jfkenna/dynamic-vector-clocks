@@ -14,7 +14,7 @@ def acceptWorker(taskQueue, serverSocket):
         print('[a0] Accepted connection')
 
 
-def networkWorker(taskQueue, id):
+def networkWorker(taskQueue, receivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
     while True:
         connection, adr = taskQueue.get()
@@ -29,9 +29,14 @@ def networkWorker(taskQueue, id):
         handleMessage(message)
 
 
-def handleMessage(message):
-    #TODO logic for updating clock, displaying messages etc.
-    return
+def handleMessage(message, receivedMessages):
+    #guard against re-handling already received messages
+    if message['clock'] in receivedMessages:
+        return
+    #add to list of received messages
+    receivedMessages[message['clock']] = True
+
+    #TODO processing / handling (and causal delivery)
 
 def validateEnv(env):
 
@@ -42,6 +47,24 @@ def validateEnv(env):
 
     #TODO add more detailed validation (e.g. port in range [1, 65353])
     return True
+
+def getPeerHosts():
+    initialPeers = []
+    print("Enter peer IPs/hostnames [enter \'finished\' to continue]")
+    while True:
+        peer = input('Enter hostname: ')
+        if peer == 'finished':
+            if (len(initialPeers) == 0):
+                print('You must provide at least one peer to continue')
+                continue
+            return initialPeers
+        try:
+            resolvedAdr = socket.gethostbyname(peer)
+            initialPeers.append(resolvedAdr)
+            print('Added peer at {0}'.format(resolvedAdr))
+        except socket.error:
+            print('Couldn\'t resolve hostname, enter a different value')
+            continue
 
 def main():
 
@@ -54,9 +77,15 @@ def main():
         return
 
 
+    #create shared resources
     #suprisingly, default python queue is thread-safe
     taskQueue = Queue()
+    receivedMessages = {} #TODO check if this is thread safe
 
+    #TODO consider passing information about new peers at runtime, so network is more fault tolerant
+    #this is an extension, so for our first implementation just start with a fixed set of peers that we can multicast to
+    peers = getPeerHosts()
+    
     #setup listener
     acceptSocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM) #ipv6 w/ TCP channel
     acceptSocket.bind((env['CLIENT_LISTEN_IP'], int(env['CLIENT_LISTEN_PORT'])))
@@ -68,7 +97,7 @@ def main():
     #worker threads
     workerThreads = []
     for i in range(0, int(env['CLIENT_WORKER_THREADS'])):
-        worker = Thread(target=networkWorker, args=(taskQueue, i))
+        worker = Thread(target=networkWorker, args=(taskQueue, receivedMessages, peers, i))
         worker.start()
 
     acceptThread.join()
