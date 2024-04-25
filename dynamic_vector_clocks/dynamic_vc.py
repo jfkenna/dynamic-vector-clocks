@@ -115,32 +115,27 @@ def deliver_message(current_matrix, current_number_sum, recv_message):
     return new_matrix, new_number_sum
 
 def can_deliver_message(process_dvc, message):
-    print(message)
-    message_dvc = message["message_dvc"]
-    sender_process = message["sender"]
-    sender_process_index = sender_process-1
-    print("sender index", sender_process_index)
-        # Check for other rows
-    print("P DVC: ",process_dvc)
-    print("M DVC: ", message_dvc)
+    # Variable setup
+    message_dvc = message["message_dvc"]                        # Message DVC
+    sender_process = message["sender"]                          # Sender process number
+    sender_process_index = sender_process-1                     # Sender process index
 
-    print("At index {0} (sender), is {0} (Msg) = {1}+1 (Proc)?".format(
-        sender_process_index,
-        message_dvc[sender_process_index][1], 
-        process_dvc[sender_process_index][1])
-    )
-    sender_msg_index_valid = message_dvc[sender_process_index][1] == process_dvc[sender_process_index][1] + 1 # If the message's sender index is 1 greater than the current DVC
-    print(sender_msg_index_valid)
-    # Check all other processes on the message DVC
-    other_msg_index_valid = True
-    for x in range(nproc-1):
-        if not x == sender_process_index:
+    # Check if the message's sender index in the message DVC is 1 greater than the index in the process's DVC
+    sender_msg_index_valid = message_dvc[sender_process_index][1] == process_dvc[sender_process_index][1] + 1 
+
+    # Check all other processes on the message DVC 
+    other_msg_index_valid = True                                # Initially, set other_msg_index_valid True (all other known index DC)
+    for x in range(nproc-1):                                    # For each known process
+        if not x == sender_process_index:                       # If x is NOT the sending process of the message (other processes)
             print("At index {0} (sender). Is {0} (Msg) <= {1}? (Proc)?".format(x, message_dvc[x][1], process_dvc[x][1]))
-            if not message_dvc[x][1] <= process_dvc[x][1]:
-                other_msg_index_valid = False
+            if not message_dvc[x][1] <= process_dvc[x][1]:      # If the message index value at the other process is greater than the index in the process DVC
+                other_msg_index_valid = False                   # Message needs to be enqueued
                 break
-    
-    can_deliver = sender_msg_index_valid and other_msg_index_valid
+
+    # Causal deliverability condition
+    can_deliver = sender_msg_index_valid and other_msg_index_valid  
+
+    # Return the causal deliverability condition
     return can_deliver
 
 def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
