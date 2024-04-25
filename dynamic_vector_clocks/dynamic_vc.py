@@ -62,19 +62,17 @@ def construct_message_dvc(destinations, process_dvc):
     return message_dvc
 
 def merge_dvcs(message_dvc, message_iproc, process_dvc):
+    print("DVC merge")
+    print("current DVC: {0}".format(process_dvc))
+    print("message DVC: {0}".format(message_dvc))
     # Create a new process DVC that will mutate based on what it has seen before, or append with
     new_process_dvc = process_dvc
     # For each row in the message DVC
-    for row_m in message_dvc:
-        seen_row_m = False                          # Seen message row boolean
+    for row_m in message_dvc:                   # Seen message row boolean
         for row_p in new_process_dvc:               # For each row in the process DVC
-            if row_m[0] == row_p[0]:                # If the message's row is a index that the receiver process has seen
-                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)
-                seen_row_m = True                   # The process has seen it now, break off
-                break
-        if not seen_row_m:                          # If the message DVC's row is new to the receiver
-            new_process_dvc.append(row_m)           # Add this row to new_process_dvc
-    increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
+            if row_m[0] == row_p[0]:                # Get each DVC's row based on the process ID
+                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)           
+    ##increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
     return new_process_dvc
 
 def generate_message(destinations, process_dvc):
@@ -117,32 +115,8 @@ def deliver_message(current_matrix, current_number_sum, recv_message):
     return new_matrix, new_number_sum
 
 def can_deliver_message(current_matrix, message):
-    message_matrix = message["matrix_message"]
-    recv_process_index = iproc - 1
-    sending_process_index = message["sender"]-1
-    print("The received matrix clock of Process {0} (index {1}) with the message from Process {2} (index {3})".format(
-        iproc,
-        recv_process_index,
-        message["sender"],
-        sending_process_index
-    ))
 
-    message_matrix_column = message_matrix[:,recv_process_index]
-    process_matrix_column = current_matrix[:,recv_process_index]
-    
-    # If the value of the i,j value of the row (sender)/column (receiver) is one LESS than the current process's i,j value 
-    message_value_valid = message_matrix_column[sending_process_index] - 1 == process_matrix_column[sending_process_index]
-    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
-    other_indexes_valid = True
-    for x in range(nproc-1):
-        if not x == sending_process_index: # Checking all indexes not of the sender
-            if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
-                print("This is invalid - we need to queue this message!")
-                other_indexes_valid = False
-                break
-
-    can_deliver = message_value_valid and other_indexes_valid
-    return can_deliver
+    return 1
 
 def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
     current_matrix = process_matrix
@@ -185,7 +159,10 @@ def check_message_queue(process_matrix, number_sum, message_queue, recv_message)
 
 def process_loop(event_list, process_events):
     # Process n's initial dynamic VC
-    process_dvc = [[iproc, 0]]
+    process_dvc = []
+    for i in range(1, nproc):
+        process_dvc.append([i, 0])
+    
     # Process n's current main summed number 
     number_sum = 0
     # Process n's message queue
@@ -215,8 +192,7 @@ def process_loop(event_list, process_events):
                 comm.Probe(tag=int(event_tag), status=s)
                 # If the message in the channel matches the tag this event requires
                 if str(s.tag) == event_tag:
-                    # Set orig_idx (process ID) and obtain recv_message
-                    orig_idx = s.tag
+                    # Set orig_idx (process ID) and obtain recv_message  
                     recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
                     print("got")
                     break
