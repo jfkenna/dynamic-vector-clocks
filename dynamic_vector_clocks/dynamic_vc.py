@@ -16,13 +16,6 @@ def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))
 
 def broadcast_message(message, event_tag, dest_processes):
-    # Extract target processes (without root)
-    print("Process {0} broadcasting message to {1} @ {2} ".format(
-        iproc, 
-        dest_processes,
-        datetime.now().strftime("%H:%M:%S.%f"), 
-    ))
-    # Develop the matrix clock here, knowing target proce
     for idx in dest_processes:
         send_message(message, idx, event_tag)
 
@@ -36,46 +29,6 @@ def determine_recv_process(ops_list, event_tag, event_type):
     elif event_type == "broadcast":
         dest_processes = [x for x in range(1, nproc) if x != iproc]
         return dest_processes
-
-def maximum_matrix_values(matrix_a, matrix_b):
-    max_matrix = numpy.zeros((nproc-1, nproc-1))
-    for a in range(len(matrix_a)):
-        for b in range(len(matrix_b)):
-            max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])
-    return max_matrix
-
-def increment_dvc(dvc):
-    for vc in dvc:
-        if vc[0] == iproc: # Obtain this process's VC within the DVC
-            vc[1] += 1 # Increment by 1
-            break # Exit the loop
-    return dvc
-
-def construct_message_dvc(destinations, process_dvc):
-    print("Generating DVC to include in message. From process {0} to {1}".format(
-        iproc,
-        destinations
-    ))
-
-    message_dvc = increment_dvc(process_dvc)
-    # Return the incremented DVC
-    return message_dvc
-
-def merge_dvcs(message_dvc, message_iproc, process_dvc):
-    # Create a new process DVC that will mutate based on what it has seen before, or append with
-    new_process_dvc = process_dvc
-    # For each row in the message DVC
-    for row_m in message_dvc:
-        seen_row_m = False                          # Seen message row boolean
-        for row_p in new_process_dvc:               # For each row in the process DVC
-            if row_m[0] == row_p[0]:                # If the message's row is a index that the receiver process has seen
-                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)
-                seen_row_m = True                   # The process has seen it now, break off
-                break
-        if not seen_row_m:                          # If the message DVC's row is new to the receiver
-            new_process_dvc.append(row_m)           # Add this row to new_process_dvc
-    increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
-    return new_process_dvc
 
 def generate_message(destinations, process_dvc):
     print("Process {0} generating message/updated DVC to destinations {1}. Initial DVC of".format(
@@ -102,8 +55,36 @@ def generate_message(destinations, process_dvc):
 def generate_random_float():
     return random.uniform(0, 10)
 
-def deliver_message(current_matrix, current_number_sum, recv_message):
-    new_matrix = maximum_matrix_values(current_matrix, recv_message["matrix_message"])
+def increment_dvc(dvc):
+    for vc in dvc:
+        if vc[0] == iproc: # Obtain this process's VC within the DVC
+            vc[1] += 1 # Increment by 1
+            break # Exit the loop
+    return dvc
+
+def construct_message_dvc(destinations, process_dvc):
+    print("Generating DVC to include in message. From process {0} to {1}".format(
+        iproc,
+        destinations
+    ))
+
+    message_dvc = increment_dvc(process_dvc)
+    # Return the incremented DVC
+    return message_dvc
+
+def merge_dvcs(message_dvc, process_dvc):
+    # Create a new process DVC that will mutate based on what it has seen before, or append with
+    new_process_dvc = process_dvc
+    # For each row in the message DVC
+    for row_m in message_dvc:                   # Seen message row boolean
+        for row_p in new_process_dvc:               # For each row in the process DVC
+            if row_m[0] == row_p[0]:                # Get each DVC's row based on the process ID
+                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)           
+    ##increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
+    return new_process_dvc
+
+def deliver_message(proces_dvc, current_number_sum, recv_message):
+    mew_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])
     
     # Increment the number_sum with the received data
     new_number_sum = current_number_sum + recv_message["number"]
@@ -114,62 +95,55 @@ def deliver_message(current_matrix, current_number_sum, recv_message):
         str(new_number_sum)
     ))
 
-    return new_matrix, new_number_sum
+    return mew_dvc, new_number_sum
 
-def can_deliver_message(current_matrix, message):
-    message_matrix = message["matrix_message"]
-    recv_process_index = iproc - 1
-    sending_process_index = message["sender"]-1
-    print("The received matrix clock of Process {0} (index {1}) with the message from Process {2} (index {3})".format(
-        iproc,
-        recv_process_index,
-        message["sender"],
-        sending_process_index
-    ))
+def can_deliver_message(process_dvc, message):
+    # Variable setup
+    message_dvc = message["message_dvc"]                        # Message DVC
+    sender_process = message["sender"]                          # Sender process number
+    sender_process_index = sender_process-1                     # Sender process index
 
-    message_matrix_column = message_matrix[:,recv_process_index]
-    process_matrix_column = current_matrix[:,recv_process_index]
-    
-    # If the value of the i,j value of the row (sender)/column (receiver) is one LESS than the current process's i,j value 
-    message_value_valid = message_matrix_column[sending_process_index] - 1 == process_matrix_column[sending_process_index]
-    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
-    other_indexes_valid = True
-    for x in range(nproc-1):
-        if not x == sending_process_index: # Checking all indexes not of the sender
-            if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
-                print("This is invalid - we need to queue this message!")
-                other_indexes_valid = False
+    # Check if the message's sender index in the message DVC is 1 greater than the index in the process's DVC
+    sender_msg_index_valid = message_dvc[sender_process_index][1] == process_dvc[sender_process_index][1] + 1 
+
+    # Check all other processes on the message DVC 
+    other_msg_index_valid = True                                # Initially, set other_msg_index_valid True (all other known index DC)
+    for x in range(nproc-1):                                    # For each known process
+        if not x == sender_process_index:                       # If x is NOT the sending process of the message (other processes)
+            if not message_dvc[x][1] <= process_dvc[x][1]:      # If the message index value at the other process is greater than the index in the process DVC
+                other_msg_index_valid = False                   # Message needs to be enqueued
                 break
 
-    can_deliver = message_value_valid and other_indexes_valid
+    # Causal deliverability condition
+    can_deliver = sender_msg_index_valid and other_msg_index_valid  
+    if can_deliver: 
+        print("This message satisfied the DVC causal deliverability condition. Delivering.")
+    else:
+        print("This message did not satisfy the DVC causal deliverability condition. Will be enqueued.")
+
+    # Return the causal deliverability condition
     return can_deliver
 
-def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
-    current_matrix = process_matrix
+def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
+    current_dvc = process_dvc
     current_number_sum = number_sum
     first_pass = True
-
-    print("The current message queue")
-    print(message_queue)
-
-    iterating = True
     iterator = 0
 
-    while iterating:
+    # Iterate over until we can't deliver any messages/nothing in the queue
+    while True:
         if len(message_queue) >= 1:
-            print("Need to check if we can deliver messages")
             if iterator == len(message_queue):
                 print("Exhausted all messages. Breaking")
                 break
             elif message_queue[iterator] == recv_message and first_pass:
-                print("This was the message that was just added - skip it only on the first pass")
+                print("This was the message that was just added - skipping it on first pass")
                 iterator += 1 
             else:
                 queued_message = message_queue[iterator]
-                print("Grabbing index {0} of the message queue")
-                print(message_queue[iterator])
-                if can_deliver_message(current_matrix, queued_message):
-                    current_matrix, current_number_sum = deliver_message(process_matrix, current_number_sum, queued_message)
+                print("Grabbing index {0} of the message queue".format(iterator))
+                if can_deliver_message(current_dvc, queued_message):
+                    current_dvc, current_number_sum = deliver_message(process_dvc, current_number_sum, queued_message)
                     message_queue.pop(iterator)
                     # Reset iterator to 0
                     iterator = 0
@@ -178,22 +152,22 @@ def check_message_queue(process_matrix, number_sum, message_queue, recv_message)
                     # Move to the next iteration
                     iterator += 1
         else:
-            print("No messages in the queue")
+            print("No messages are in the message/hold back queue")
             break
 
-    return current_matrix, current_number_sum
+    return current_dvc, current_number_sum
 
 def process_loop(event_list, process_events):
     # Process n's initial dynamic VC
-    process_dvc = [[iproc, 0]]
+    process_dvc = []
+    for i in range(1, nproc):
+        process_dvc.append([i, 0])
     # Process n's current main summed number 
     number_sum = 0
-    # Process n's message queue
+    # Process n's message/hold-back queue
     message_queue = []
 
     print("Process loop: {0} : {1}".format(iproc, process_events))
-    print(process_dvc)     
-
     for idx, event in enumerate(process_events):
         print("----------")
         
@@ -204,10 +178,8 @@ def process_loop(event_list, process_events):
         internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
 
         if recv_op: # If the event was a receive
-            print("Receive event")
             recv_message = None
             event_tag = recv_op.group(1)
-            print("Receive with tag:", event_tag)
 
            # Probe for messages, and obtain message from channel should one be sent
             while True:
@@ -215,25 +187,27 @@ def process_loop(event_list, process_events):
                 comm.Probe(tag=int(event_tag), status=s)
                 # If the message in the channel matches the tag this event requires
                 if str(s.tag) == event_tag:
-                    # Set orig_idx (process ID) and obtain recv_message
-                    orig_idx = s.tag
+                    # Set orig_idx (process ID) and obtain recv_message  
                     recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
-                    print("got")
                     break
             
-            print("Process {0} received number {1} from Process {2} @ {3}. Adding to {4}. DVC is".format(
+            print("Process {0} received number {1} from Process {2} @ {3}".format(
                 iproc, 
                 str(recv_message["number"]),
                 str(recv_message["sender"]),
-                datetime.now().strftime("%H:%M:%S.%f"), 
-                str(number_sum)
+                datetime.now().strftime("%H:%M:%S.%f")
             ))
-            message_dvc = recv_message["message_dvc"]
-            message_iproc = recv_message["sender"]
-            process_dvc = merge_dvcs(message_dvc, message_iproc, process_dvc)
-            print("After receiving, process_dvc")
-            print(process_dvc)
-         
+
+            if can_deliver_message(process_dvc, recv_message):
+                process_dvc, number_sum = deliver_message(process_dvc, number_sum, recv_message)
+            else:
+                message_queue.append(recv_message)
+
+            # Check if any other messages can be delivered 
+            process_dvc, number_sum = check_message_queue(process_dvc, number_sum, message_queue, recv_message)
+            print("DVC after {0}:\t{1}".format(event, process_dvc))
+            print("Number Sum:\t", number_sum)
+  
         elif send_op: # If the event was a send
             print("Send event")
             event_tag = send_op.group(1) # Obtain the send tag to add to the message
