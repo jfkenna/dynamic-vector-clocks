@@ -51,7 +51,7 @@ def generate_message(destinations, process_dvc):
     return message
 
 def generate_random_float():
-    return random.uniform(0, 10)
+    return round(random.uniform(0, 10), 3)
 
 # Deliverability Functions
 def can_deliver_message(process_dvc, message):
@@ -88,7 +88,7 @@ def deliver_message(proces_dvc, current_number_sum, recv_message):
     new_number_sum = current_number_sum + recv_message["number"]
 
     # Print the increment
-    print("{0} (message) + {1} (current sum). Process {2}'s sum = {3}".format(
+    print("{0} (message number) + {1} (current sum). Process {2}'s sum = {3}".format(
         str(recv_message["number"]),
         current_number_sum,
         iproc, 
@@ -104,6 +104,7 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
     iterator = 0
 
     # Iterate over until we can't deliver any messages/nothing in the queue
+    print("\nChecking messages in the message/hold back queue for deliverability")
     while True:
         if len(message_queue) >= 1:
             if iterator == len(message_queue):
@@ -114,7 +115,6 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
                 iterator += 1 
             else:
                 queued_message = message_queue[iterator]
-                print("Grabbing index {0} of the message queue".format(iterator))
                 if can_deliver_message(current_dvc, queued_message):
                     current_dvc, current_number_sum = deliver_message(process_dvc, current_number_sum, queued_message)
                     message_queue.pop(iterator)
@@ -166,7 +166,7 @@ def process_loop(event_list, process_events):
     message_queue = []
 
     for idx, event in enumerate(process_events):
-        print("------------------\n| Event #{0} -> {1} |\n------------------".format(idx, event))
+        print("-----------------------\nEvent #{0} -> {1}: ({2})\n-----------------------".format(idx, event, number_sum))
 
         recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
         send_op = re.search("^s([1-9].*)", event) # If the event was a send
