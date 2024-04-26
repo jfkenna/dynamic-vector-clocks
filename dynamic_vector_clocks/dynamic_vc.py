@@ -12,6 +12,7 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
+# Messaging Functions
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))
 
@@ -22,7 +23,6 @@ def broadcast_message(message, event_tag, dest_processes):
 def determine_recv_process(ops_list, event_tag, event_type):
     if event_type == "send":
         target_event = "r" + event_tag
-        print("Looking for target receive event:", target_event)
         for idx in range(0, len(ops_list)):
             if target_event in ops_list[idx]:
                 return [idx+1]
@@ -31,12 +31,7 @@ def determine_recv_process(ops_list, event_tag, event_type):
         return dest_processes
 
 def generate_message(destinations, process_dvc):
-    print("Process {0} generating message/updated DVC to destinations {1}. Initial DVC of".format(
-        iproc,  
-        destinations
-    ))
-    print(process_dvc)
-    message_dvc = construct_message_dvc(destinations, process_dvc)
+    message_dvc = construct_message_dvc(process_dvc)
     # Generate a random float
     r_float = generate_random_float()
     # Construct a message
@@ -45,58 +40,20 @@ def generate_message(destinations, process_dvc):
         'number': r_float,
         'message_dvc': message_dvc
     }
-    print("Process {0} generated DVC and message heading for Process {1}. Generated DVC of:".format(
+
+    print("Process {0} generated message heading for Process(es) {1}. Number: {2}. DVC of {3}".format(
         iproc,  
-        destinations
+        destinations,
+        r_float,
+        message_dvc
     ))
-    print(message_dvc)
+
     return message
 
 def generate_random_float():
-    return random.uniform(0, 10)
+    return round(random.uniform(0, 10), 3)
 
-def increment_dvc(dvc):
-    for vc in dvc:
-        if vc[0] == iproc: # Obtain this process's VC within the DVC
-            vc[1] += 1 # Increment by 1
-            break # Exit the loop
-    return dvc
-
-def construct_message_dvc(destinations, process_dvc):
-    print("Generating DVC to include in message. From process {0} to {1}".format(
-        iproc,
-        destinations
-    ))
-
-    message_dvc = increment_dvc(process_dvc)
-    # Return the incremented DVC
-    return message_dvc
-
-def merge_dvcs(message_dvc, process_dvc):
-    # Create a new process DVC that will mutate based on what it has seen before, or append with
-    new_process_dvc = process_dvc
-    # For each row in the message DVC
-    for row_m in message_dvc:                   # Seen message row boolean
-        for row_p in new_process_dvc:               # For each row in the process DVC
-            if row_m[0] == row_p[0]:                # Get each DVC's row based on the process ID
-                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)           
-    ##increment_dvc(new_process_dvc)                  # Increment the process's index with the receive
-    return new_process_dvc
-
-def deliver_message(proces_dvc, current_number_sum, recv_message):
-    mew_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])
-    
-    # Increment the number_sum with the received data
-    new_number_sum = current_number_sum + recv_message["number"]
-
-    # Print the increment
-    print("After addition, Process {0} has number sum {1}".format(
-        iproc, 
-        str(new_number_sum)
-    ))
-
-    return mew_dvc, new_number_sum
-
+# Deliverability Functions
 def can_deliver_message(process_dvc, message):
     # Variable setup
     message_dvc = message["message_dvc"]                        # Message DVC
@@ -124,6 +81,22 @@ def can_deliver_message(process_dvc, message):
     # Return the causal deliverability condition
     return can_deliver
 
+def deliver_message(proces_dvc, current_number_sum, recv_message):
+    mew_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])
+    
+    # Increment the number_sum with the received data
+    new_number_sum = current_number_sum + recv_message["number"]
+
+    # Print the increment
+    print("{0} (message number) + {1} (current sum). Process {2}'s sum = {3}".format(
+        str(recv_message["number"]),
+        current_number_sum,
+        iproc, 
+        str(new_number_sum)
+    ))
+
+    return mew_dvc, new_number_sum
+
 def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
     current_dvc = process_dvc
     current_number_sum = number_sum
@@ -131,6 +104,7 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
     iterator = 0
 
     # Iterate over until we can't deliver any messages/nothing in the queue
+    print("\nChecking messages in the message/hold back queue for deliverability")
     while True:
         if len(message_queue) >= 1:
             if iterator == len(message_queue):
@@ -141,7 +115,6 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
                 iterator += 1 
             else:
                 queued_message = message_queue[iterator]
-                print("Grabbing index {0} of the message queue".format(iterator))
                 if can_deliver_message(current_dvc, queued_message):
                     current_dvc, current_number_sum = deliver_message(process_dvc, current_number_sum, queued_message)
                     message_queue.pop(iterator)
@@ -157,6 +130,31 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
 
     return current_dvc, current_number_sum
 
+# Dynamic Vector Clock/Vector Clock Functions
+def increment_dvc(dvc):
+    for vc in dvc:
+        if vc[0] == iproc: # Obtain this process's VC within the DVC
+            vc[1] += 1 # Increment by 1
+            break # Exit the loop
+    return dvc
+
+def construct_message_dvc(process_dvc):
+    message_dvc = increment_dvc(process_dvc)
+    # Return the incremented DVC
+    return message_dvc
+
+def merge_dvcs(message_dvc, process_dvc):
+    # Create a new process DVC that will mutate on the maximum of the message/process DVCs row-wise
+    new_process_dvc = process_dvc
+    # For each row in the message DVC
+    for row_m in message_dvc:                       # Seen message row boolean
+        for row_p in new_process_dvc:               # For each row in the process DVC
+            if row_m[0] == row_p[0]:                # Get each DVC's row based on the process ID
+                row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(msg, p)           
+    ##increment_dvc(new_process_dvc)                # Increment the process's index with the receive
+    return new_process_dvc
+
+# Process Loop / main
 def process_loop(event_list, process_events):
     # Process n's initial dynamic VC
     process_dvc = []
@@ -167,11 +165,9 @@ def process_loop(event_list, process_events):
     # Process n's message/hold-back queue
     message_queue = []
 
-    print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
-        print("----------")
-        
-        print("Event #{0} -> {1}".format(idx, event))
+        print("-----------------------\nEvent #{0} -> {1}: ({2})\n-----------------------".format(idx, event, number_sum))
+
         recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
         send_op = re.search("^s([1-9].*)", event) # If the event was a send
         bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
@@ -209,16 +205,13 @@ def process_loop(event_list, process_events):
             print("Number Sum:\t", number_sum)
   
         elif send_op: # If the event was a send
-            print("Send event")
             event_tag = send_op.group(1) # Obtain the send tag to add to the message
-            print("Send with tag:", event_tag)
             destination_process = determine_recv_process(event_list, event_tag, "send")
-            print("Send this event to process {0}".format(destination_process))
+            print("Unicast message to process {0}".format(destination_process))
             message = generate_message(destination_process, process_dvc)
             
-            print("Process {0} sending message with generated number {1} to Process {2} @ {3}".format(
+            print("Process {0} sending unicast message to Process {1} @ {2}".format(
                 iproc, 
-                message["number"],
                 destination_process[0],
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
@@ -227,16 +220,13 @@ def process_loop(event_list, process_events):
             send_message(message, destination_process[0], event_tag)
 
         elif bcast_op: # If the event was a broadcast
-            print("Broadcast event")
             event_tag = bcast_op.group(1)
-            print("Send with tag:", event_tag)
             destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
-            print("Send this broadcast to process {0}".format(destination_processes))
+            print("Broadcast message to process(es) {0}".format(destination_processes))
             message = generate_message(destination_processes, process_dvc)
 
-            print("Process {0} boradcasting message with generated number {1} to Processes {2} @ {3}".format(
+            print("Process {0} broadcasting message to Process(es) {1} @ {2}".format(
                 iproc, 
-                message["number"],
                 destination_processes,
                 datetime.now().strftime("%H:%M:%S.%f"), 
             ))
@@ -254,8 +244,6 @@ def process_loop(event_list, process_events):
             process_dvc = increment_dvc(process_dvc)
             print(process_dvc)
 
-        print("----------")
-
 def event_list_from_file(file_loc):
     event_list = []
     # Open the file from args (second element)
@@ -272,28 +260,15 @@ def main():
     event_list = event_list_from_file(file_name)
 
     if iproc == 0:
-        print("Process {0} to send events to other processes @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         sleep(1)
         for i in range(0, nproc-1):
-            print("Process {0} -> {1}".format(i, event_list[i]))
-            print("Process {0} sending ops to {1} @ {2} seconds".format(
-                iproc, 
-                i+1, #Sending to i+1
-                datetime.now().strftime("%H:%M:%S.%f"), 
-            ))
-            #print(ops_list[i])
             comm.send(event_list[i], dest=i+1, tag=0)
-            print("\n")
-
-        # Await until each process has finished and sent a confirmation back
-            
     else:
-        print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         data = comm.recv(source=0, tag=0)
         process_events = data.split(", ")
-        print("Process {0} obtained event_list from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        print("|----- Process {0}: {1} -----|".format(iproc, process_events))
         process_loop(event_list, process_events)
-        print("\n")
+        print("")
 
 main()
 
