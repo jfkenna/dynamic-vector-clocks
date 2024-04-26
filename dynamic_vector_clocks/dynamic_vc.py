@@ -168,7 +168,6 @@ def process_loop(event_list, process_events):
     # Process n's message/hold-back queue
     message_queue = []
 
-    print("Process loop: {0} : {1}".format(iproc, process_events))
     for idx, event in enumerate(process_events):
         print("----------")
         
@@ -269,28 +268,15 @@ def main():
     event_list = event_list_from_file(file_name)
 
     if iproc == 0:
-        print("Process {0} to send events to other processes @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         sleep(1)
         for i in range(0, nproc-1):
-            print("Process {0} -> {1}".format(i, event_list[i]))
-            print("Process {0} sending ops to {1} @ {2} seconds".format(
-                iproc, 
-                i+1, #Sending to i+1
-                datetime.now().strftime("%H:%M:%S.%f"), 
-            ))
-            #print(ops_list[i])
             comm.send(event_list[i], dest=i+1, tag=0)
-            print("\n")
-
-        # Await until each process has finished and sent a confirmation back
-            
     else:
-        print("Process {0} @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
         data = comm.recv(source=0, tag=0)
         process_events = data.split(", ")
-        print("Process {0} obtained event_list from root @ {1}".format(iproc, datetime.now().strftime("%H:%M:%S.%f")))
+        print("Process {0} @ {1}: {2}".format(iproc, datetime.now().strftime("%H:%M:%S.%f"), process_events))
         process_loop(event_list, process_events)
-        print("\n")
+        print("")
 
 main()
 
