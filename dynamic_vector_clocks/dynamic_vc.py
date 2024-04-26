@@ -169,9 +169,8 @@ def process_loop(event_list, process_events):
     message_queue = []
 
     for idx, event in enumerate(process_events):
-        print("----------")
-        
-        print("Event #{0} -> {1}".format(idx, event))
+        print("------------------\n| Event #{0} -> {1} |\n------------------".format(idx, event))
+
         recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
         send_op = re.search("^s([1-9].*)", event) # If the event was a send
         bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
