@@ -3,7 +3,7 @@ from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
-from shared.vector_clock import canDeliver, deliverMessage, incrementVectorClock, mergeClocks
+from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 import socket
 import uuid
 import sys
@@ -49,6 +49,7 @@ def UIWorker(outgoingMessageQueue):
 
 def handleMessage(message, receivedMessages, peers):
     global processVectorClock
+    global processMessageQueue
     if message['id'] in receivedMessages:
         return
     #add to list of received messages
@@ -65,9 +66,10 @@ def handleMessage(message, receivedMessages, peers):
         if canDeliver(processVectorClock, message):
             #print("initial process VC", processVectorClock)
             processVectorClock = deliverMessage(processVectorClock, message, processId)
-    #TODO - enqueue message
-    #   else:
-    #       Add to the message queue
+        else:
+            processMessageQueue.append(message)
+
+        processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
     #TODO - for now, just display received messages
 
 def broadcastToPeers(message, peers):
@@ -182,5 +184,6 @@ processId = str(uuid.uuid4())
 # This process's vector clock - initialised with its UUID/0 i.e 
 # [ [UUID-AAAAA0, 0] ]
 processVectorClock = [[processId, 0]]
+processMessageQueue = []
 # Main 
 main()
