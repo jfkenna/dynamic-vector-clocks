@@ -2,13 +2,20 @@
 
 This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms - for Semetser 1, 2024.
 
-The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**.
+The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially - the choice of **Matrix Clocks** was elected; however the team opted for implementing the former based on the real-world application of a multi-tenant chat application which primarily orients around broadcasting messages between peers - and additionally (most importantly), the dynamic nature of Dynamic Vector Clocks not needing to know how many peers are in the system initially.
 
-The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase built upon the implementation that was seen in the second; and each is described below on implementation, invoking and design/approach.
+The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase built upon the base implementation of the algorithm within Python that was then referenced and implemented in the second. Each phase is described below - the design, approach and invocation of the algorithm within each.
 
 ## Phase 1 - `phase1_mpi`
 
+The first phase of this project is implementing the Dynamic Vector Clock Algorithm using **Message Passing Interface** - or MPI for short. 
 
+This first phase orients aroung the _known_ input of a distributed system's processes; where events are sent and received between processes. Both Dynamic Vector Clock and Matrix Clock implementations have been developed in this phase -  the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+
+The process of these implementations are as follows:
+1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective repositories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
+2. The main algorithm is invoked; Process `0` is responsible for splitting the input line for each process (`1` to `N`) - which is sent at the start of the program.
+3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row. Broadcast messages are denoted by `b<integer>`, unicast messages by `s<integer>`, receive events by `r<integer>` and internal events with an alphabetical character. Important to note is that for an event to send a message picked up by another, the same integer must be used (i.e `s1` for the sender, `r1` for the receiver).
 
 ## Phase 2 - `phase2_sockets`
 
