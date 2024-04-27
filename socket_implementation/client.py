@@ -91,7 +91,7 @@ def getPeerHosts():
     print("Enter peer IPs/hostnames [enter \'finished\' to continue]")
     while True:
         peer = input('Enter hostname: ')
-        if peer == 'finished':
+        if peer == 'finished' or peer == 'f':
             if (len(initialPeers) == 0):
                 print('You must provide at least one peer to continue')
                 continue
