@@ -3,6 +3,7 @@ from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
+from shared.vector_clock import incrementVectorClock
 import socket
 import uuid
 import sys
@@ -18,10 +19,11 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
     while True:
         outgoingMessageText = outgoingMessageQueue.get()
-        clock = {processId: str(uuid.uuid4())} #TODO replace this clock dict with the current vector clock of the process
-        outgoingMessage = constructMessage(MessageType.BROADCAST_MESSAGE, clock, outgoingMessageText, processId)
+        global processVectorClock 
+        processVectorClock = incrementVectorClock(processVectorClock, processId)
+        #clock = {processId: str(uuid.uuid4())} #TODO replace this clock dict with the current vector clock of the process
+        outgoingMessage = constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId)
         broadcastToPeers(outgoingMessage, peers)
-
 
 def networkWorker(connectionQueue, receivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
@@ -51,17 +53,21 @@ def handleMessage(message, receivedMessages, peers):
     #add to list of received messages
     receivedMessages[message['id']] = True
     
-    print("Sender:",message["sender"])
-    print("Receiver:",processId)
-    print(processVectorClock)
+    #print("Sender:",message["sender"])
+    #print("Receiver:",processId)
+    #print(processVectorClock)
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     broadcastToPeers(message, peers)
     # If this processId is the sender of the message
     if message["sender"] == processId:
-        print("update the VC of the sending proccess")
+        print("The VC of the sending proccess - has been incremented")
+        print(processVectorClock)
     # Otherwise receiver
     else:
-        print("update the VC of the receiver")
+        print("Deliver/update the VC of the receiver if causality met")
+        print(message['clock'])
+        print(processVectorClock)
+
     #TODO processing / handling / message queue / causal delivery
     #TODO
     #TODO
@@ -179,5 +185,8 @@ if not validateEnv(env):
 #     [UUID-BBBBBB   2]
 #and so on
 processId = str(uuid.uuid4()) 
+# This process's vector clock - initialised with its UUID/0 i.e 
+# [ [UUID-AAAAA0, 0] ]
 processVectorClock = [[processId, 0]]
+# Main 
 main()
