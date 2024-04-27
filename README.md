@@ -8,9 +8,13 @@ The repository consists of two main directories - `phase1_mpi` and `phase2_socke
 
 ## Phase 1 - `phase1_mpi`
 
+### Approach
+
 The first phase of this project is implementing the Dynamic Vector Clock Algorithm using **Message Passing Interface** - or MPI for short. 
 
-This first phase orients aroung the _known_ input of a distributed system's processes; where events are sent and received between processes. Both Dynamic Vector Clock and Matrix Clock implementations have been developed in this phase -  the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock and Matrix Clock implementations have been developed in this phase -  the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+
+### Implementation
 
 The process of these implementations are as follows:
 1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective repositories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
@@ -22,7 +26,11 @@ The process of these implementations are as follows:
 5. No matter on deliverability, both algorithms invoke checking the message queue on attempted message delivery after receiving a message. Until there are no messages in the queue (will exit if none were added on first pass), the process's local vector clock is checked against each message enqueued. If the message can be enqueued, the clocks are updated, the process's number is added with the message's number - and the loop starts again (this ensures re-checks are done on all messages when one is delivered for subsequent deliveries).
 6. The `process_loop` is continually invoked until all events received in 2. are exhausted, and the process stops.
 
+### Invocation
+
 ## Phase 2 - `phase2_sockets`
+
+### 
 
 - [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
 - [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
