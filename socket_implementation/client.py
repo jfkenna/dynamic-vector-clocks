@@ -3,6 +3,7 @@ from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
+from shared.vector_clock import canDeliver, deliverMessage, incrementVectorClock, mergeClocks
 import socket
 import uuid
 import sys
@@ -18,10 +19,11 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
     while True:
         outgoingMessageText = outgoingMessageQueue.get()
-        clock = {processId: str(uuid.uuid4())} #TODO replace this clock dict with the current vector clock of the process
-        outgoingMessage = constructMessage(MessageType.BROADCAST_MESSAGE, clock, outgoingMessageText, processId)
+        global processVectorClock 
+        processVectorClock = incrementVectorClock(processVectorClock, processId)
+        #clock = {processId: str(uuid.uuid4())} #TODO replace this clock dict with the current vector clock of the process
+        outgoingMessage = constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId)
         broadcastToPeers(outgoingMessage, peers)
-
 
 def networkWorker(connectionQueue, receivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
@@ -46,25 +48,32 @@ def UIWorker(outgoingMessageQueue):
 
 
 def handleMessage(message, receivedMessages, peers):
+    global processVectorClock
     if message['id'] in receivedMessages:
         return
     #add to list of received messages
     receivedMessages[message['id']] = True
-
+    
+    #print("Sender:",message["sender"])
+    #print("Receiver:",processId)
+    #print(processVectorClock)
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     broadcastToPeers(message, peers)
-
-    #TODO processing / handling / message queue / causal delivery
-    #TODO
-    #TODO
-    #for now, just display received messages
-    senderName = 'You' if (message['sender'] == processId) else message['sender'] 
-    print('[{0}]: {1}'.format(senderName, message['text']))
-
+    # If this processId is the sender of the message
+    if not message["sender"] == processId:
+        #print("Deliver/update the VC of the receiver if causality met?")
+        if canDeliver(processVectorClock, message):
+            #print("initial process VC", processVectorClock)
+            processVectorClock = deliverMessage(processVectorClock, message, processId)
+    #TODO - enqueue message
+    #   else:
+    #       Add to the message queue
+    #TODO - for now, just display received messages
 
 def broadcastToPeers(message, peers):
     jsonMessage = messageToJson(message)
     for peer in peers:
+        #print("Broadcasting to peer {0}".format(peer))
         #print("trying with peer {0}".format(peer))
         #TODO add handling for errors, unresponsive peer etc.
         #TODO check this send logic is OK
@@ -170,4 +179,8 @@ if not validateEnv(env):
 #     [UUID-BBBBBB   2]
 #and so on
 processId = str(uuid.uuid4()) 
+# This process's vector clock - initialised with its UUID/0 i.e 
+# [ [UUID-AAAAA0, 0] ]
+processVectorClock = [[processId, 0]]
+# Main 
 main()
