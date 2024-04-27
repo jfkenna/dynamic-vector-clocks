@@ -82,7 +82,7 @@ def can_deliver_message(process_dvc, message):
     return can_deliver
 
 def deliver_message(proces_dvc, current_number_sum, recv_message):
-    mew_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])
+    new_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])
     
     # Increment the number_sum with the received data
     new_number_sum = current_number_sum + recv_message["number"]
@@ -95,7 +95,7 @@ def deliver_message(proces_dvc, current_number_sum, recv_message):
         str(new_number_sum)
     ))
 
-    return mew_dvc, new_number_sum
+    return new_dvc, new_number_sum
 
 def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
     current_dvc = process_dvc
