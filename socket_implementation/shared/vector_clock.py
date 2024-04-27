@@ -37,7 +37,12 @@ def obtainIndexOfUuid(clock, uuid):
             break
     return index
 
-def deliverMessage(processVectorClock, message):
+def deliverMessage(processVectorClock, message, processId):
+    # Print out the message
+    senderName = 'You' if (message['sender'] == processId) else message['sender'] 
+    print('[{0}]: {1}'.format(senderName, message['text']))
+    
+    # Merge VCs upon delivery
     messageVectorClock = message['clock']
     newProcessVectorClock = mergeClocks(processVectorClock, messageVectorClock)
     return newProcessVectorClock
@@ -48,21 +53,13 @@ def canDeliver(processVectorClock, message):
     messageVectorClock = message["clock"]                       # Message DVC
     senderUuid = message["sender"]                              # Sender UUID
 
-    print("Process's VC:,", processVectorClock)
-    print("Message VC:", messageVectorClock)
-    print("senders UUID", senderUuid)
     if seenSender(processVectorClock, senderUuid):
-        print("seen")
         # Lets obtain the index of the sender in the process and message VCs
         pVectorClockSenderIdx = obtainIndexOfUuid(processVectorClock, senderUuid)
         mVectorClockSenderIdx = obtainIndexOfUuid(messageVectorClock, senderUuid)
 
-        print("Sender has index {0} in the processes VC".format(pVectorClockSenderIdx))
-        print("Sender has index {0} in the message VC".format(mVectorClockSenderIdx))
-
         # Check if the message's sender index in the message VC is 1 greater than the index in the process's DVC
         senderIndexValid = messageVectorClock[mVectorClockSenderIdx][1] == processVectorClock[pVectorClockSenderIdx][1] + 1 
-        print("Sender index valid?:", senderIndexValid)
 
         # Check other indexes on the message clock are <= the process's clock
         otherIndexesValid = True                                # Initially, set other_msg_index_valid True (all other known index DC)
@@ -73,11 +70,8 @@ def canDeliver(processVectorClock, message):
                     otherIndexesValid = False
                     break
 
+        # Set deliverable upon the sender index valid (message > by 1) and each other index in the message VC is <= process's index
         delivarable = senderIndexValid and otherIndexesValid  
-        if delivarable: 
-            print("This message satisfied the DVC causal deliverability condition. Delivering.")
-        else:
-            print("This message did not satisfy the DVC causal deliverability condition. Will be enqueued.")
     else:
         delivarable = True      # TODO: Only until we implement initial hello where process knows of all processes
 

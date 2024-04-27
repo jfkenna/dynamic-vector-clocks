@@ -60,30 +60,20 @@ def handleMessage(message, receivedMessages, peers):
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     broadcastToPeers(message, peers)
     # If this processId is the sender of the message
-    if message["sender"] == processId:
-        print("The VC of the sending proccess - has been incremented")
-  
-    # Otherwise receiver
-    else:
-        messageVectorClock = message['clock']
-        print("Deliver/update the VC of the receiver if causality met?")
+    if not message["sender"] == processId:
+        #print("Deliver/update the VC of the receiver if causality met?")
         if canDeliver(processVectorClock, message):
             #print("initial process VC", processVectorClock)
-            processVectorClock = mergeClocks(processVectorClock, messageVectorClock)
-
-    #TODO processing / handling / message queue / causal delivery
-    #TODO
-    #TODO
-    #for now, just display received messages
-    senderName = 'You' if (message['sender'] == processId) else message['sender'] 
-    print('[{0}]: {1}'.format(senderName, message['text']))
-    print(processVectorClock)
-
+            processVectorClock = deliverMessage(processVectorClock, message, processId)
+    #TODO - enqueue message
+    #   else:
+    #       Add to the message queue
+    #TODO - for now, just display received messages
 
 def broadcastToPeers(message, peers):
     jsonMessage = messageToJson(message)
     for peer in peers:
-        print("Broadcasting to peer {0}".format(peer))
+        #print("Broadcasting to peer {0}".format(peer))
         #print("trying with peer {0}".format(peer))
         #TODO add handling for errors, unresponsive peer etc.
         #TODO check this send logic is OK
