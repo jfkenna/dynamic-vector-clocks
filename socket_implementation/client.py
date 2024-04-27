@@ -82,9 +82,11 @@ def validateEnv(env):
             print(required + ' not specified')
             return False
 
-    #TODO add more detailed validation (e.g. port in range [1, 65353])
+    if not 1 <= int(env['PROTOCOL_PORT']) <= 65353:
+        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65353.")
+        return False
+    
     return True
-
 
 def getPeerHosts():
     initialPeers = []
