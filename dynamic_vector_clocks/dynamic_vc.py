@@ -116,7 +116,7 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
             else:
                 queued_message = message_queue[iterator]
                 if can_deliver_message(current_dvc, queued_message):
-                    current_dvc, current_number_sum = deliver_message(process_dvc, current_number_sum, queued_message)
+                    current_dvc, current_number_sum = deliver_message(current_dvc, current_number_sum, queued_message)
                     message_queue.pop(iterator)
                     # Reset iterator to 0
                     iterator = 0
