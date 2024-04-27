@@ -83,7 +83,7 @@ def validateEnv(env):
             return False
 
     if not 1 <= int(env['PROTOCOL_PORT']) <= 65353:
-        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65353.")
+        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65353.".format(env['PROTOCOL_PORT']))
         return False
     
     return True
