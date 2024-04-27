@@ -41,7 +41,7 @@ def deliverMessage(processVectorClock, message, processId):
     # Print out the message
     senderName = 'You' if (message['sender'] == processId) else message['sender'] 
     print('[{0}]: {1}'.format(senderName, message['text']))
-    
+
     # Merge VCs upon delivery
     messageVectorClock = message['clock']
     newProcessVectorClock = mergeClocks(processVectorClock, messageVectorClock)
@@ -75,4 +75,26 @@ def canDeliver(processVectorClock, message):
     else:
         delivarable = True      # TODO: Only until we implement initial hello where process knows of all processes
 
-    return delivarable 
+    return delivarable
+
+def handleMessageQueue(processVectorClock, queue, message):
+    currentVectorClock = processVectorClock
+    firstPass = True
+    iterator = 0
+
+    # Iterate over until we can't deliver any messages/nothing in the queue
+    while True:
+        if len(queue) >= 1:
+            if iterator == len(queue): break                                # Break - queue is exhausted
+            elif queue[iterator] == message and firstPass: iterator += 1    # Iterate to next message in the queue
+            else:
+                queuedMessage = queue[iterator]                             # Grab the next message
+                if canDeliver(currentVectorClock, queuedMessage):           # Can the message be delivered?
+                    currentVectorClock = deliverMessage(currentVectorClock, queuedMessage)     # Deliver the message if it can be delivered
+                    queue.pop(iterator)                                     # Pop the message from the queue
+                    iterator = 0                                            # Reset iterator to 0
+                    firstPass = False                                       # Not the first pass anymore
+                else:                                                       # If the the message can't be delivered?
+                    iterator += 1                                           # Move to the next iteration
+        else: break
+    return currentVectorClock
