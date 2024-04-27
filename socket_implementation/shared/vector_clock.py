@@ -6,7 +6,7 @@ def incrementVectorClock(processVectorClock, processId):
             break                   # Exit the loop
     return revisedVectorClock
 
-def mergeClocks(messageVectorClock, processVectorClock): 
+def mergeClocks(processVectorClock, messageVectorClock): 
     # Create a new process DVC that will mutate based on what it has seen before, or append with the ones it hasn't seen
     newProcessVectorClock = processVectorClock
     # For each row in the message DVC
@@ -36,6 +36,11 @@ def obtainIndexOfUuid(clock, uuid):
             index = idx
             break
     return index
+
+def deliverMessage(processVectorClock, message):
+    messageVectorClock = message['clock']
+    newProcessVectorClock = mergeClocks(processVectorClock, messageVectorClock)
+    return newProcessVectorClock
 
 def canDeliver(processVectorClock, message):
     delivarable = False

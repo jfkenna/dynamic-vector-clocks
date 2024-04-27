@@ -3,7 +3,7 @@ from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
-from shared.vector_clock import canDeliver, incrementVectorClock, mergeClocks
+from shared.vector_clock import canDeliver, deliverMessage, incrementVectorClock, mergeClocks
 import socket
 import uuid
 import sys
@@ -65,11 +65,11 @@ def handleMessage(message, receivedMessages, peers):
   
     # Otherwise receiver
     else:
-        messageClock = message['clock']
+        messageVectorClock = message['clock']
         print("Deliver/update the VC of the receiver if causality met?")
-        print(canDeliver(processVectorClock, message))
-        #print("initial process VC", processVectorClock)
-        processVectorClock = mergeClocks(messageClock, processVectorClock)
+        if canDeliver(processVectorClock, message):
+            #print("initial process VC", processVectorClock)
+            processVectorClock = mergeClocks(processVectorClock, messageVectorClock)
 
     #TODO processing / handling / message queue / causal delivery
     #TODO
