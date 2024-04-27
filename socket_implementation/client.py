@@ -77,20 +77,22 @@ def broadcastToPeers(message, peers):
 
 
 def validateEnv(env):
+    # Check if PROTOCOL_PORT/CLIENT_WORKER_THREADS is in dotenv (.env)
     for required in ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS']:
         if required not in env:
-            print(required + ' not specified')
-            return False
-
-    if not 1 <= int(env['PROTOCOL_PORT']) <= 65353:
-        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65353.".format(env['PROTOCOL_PORT']))
+            print("Variable {0} is not specified in your dotenv (.env) file!".format(required))
+            return False 
+        
+    # Check if PROTOCOL_PORT is in valid range
+    if not 1 <= int(env['PROTOCOL_PORT']) <= 65535:
+        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65535.".format(env['PROTOCOL_PORT']))
         return False
     
     return True
 
 def getPeerHosts():
     initialPeers = []
-    print("Enter peer IPs/hostnames [enter \'finished\' to continue]")
+    print("Enter peer IPs/hostnames [enter \'finished\' or \'f\' to continue]")
     while True:
         peer = input('Enter hostname: ')
         if peer == 'finished' or peer == 'f':
@@ -124,6 +126,7 @@ def main():
     acceptSocket.bind((env['CLIENT_LISTEN_IP'], int(env['PROTOCOL_PORT'])))
     acceptSocket.listen()
     print('Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
+    print("Process ID is", processId)
     acceptThread = Thread(target=acceptWorker, args=(connectionQueue, acceptSocket, ))
     acceptThread.start()
 
