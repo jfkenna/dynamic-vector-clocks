@@ -50,10 +50,18 @@ def handleMessage(message, receivedMessages, peers):
         return
     #add to list of received messages
     receivedMessages[message['id']] = True
-
+    
+    print("Sender:",message["sender"])
+    print("Receiver:",processId)
+    print(processVectorClock)
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     broadcastToPeers(message, peers)
-
+    # If this processId is the sender of the message
+    if message["sender"] == processId:
+        print("update the VC of the sending proccess")
+    # Otherwise receiver
+    else:
+        print("update the VC of the receiver")
     #TODO processing / handling / message queue / causal delivery
     #TODO
     #TODO
@@ -65,6 +73,7 @@ def handleMessage(message, receivedMessages, peers):
 def broadcastToPeers(message, peers):
     jsonMessage = messageToJson(message)
     for peer in peers:
+        print("Broadcasting to peer {0}".format(peer))
         #print("trying with peer {0}".format(peer))
         #TODO add handling for errors, unresponsive peer etc.
         #TODO check this send logic is OK
@@ -170,4 +179,5 @@ if not validateEnv(env):
 #     [UUID-BBBBBB   2]
 #and so on
 processId = str(uuid.uuid4()) 
+processVectorClock = [[processId, 0]]
 main()
