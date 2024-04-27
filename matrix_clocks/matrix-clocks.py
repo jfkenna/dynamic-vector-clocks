@@ -69,7 +69,6 @@ def can_deliver_message(current_matrix, message):
     for x in range(nproc-1):
         if not x == sending_process_index: # Checking all indexes not of the sender
             if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
-                print("This is invalid - we need to queue this message!")
                 other_indexes_valid = False
                 break
 
