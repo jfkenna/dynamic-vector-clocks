@@ -1,14 +1,16 @@
-# COMP90020-Double-J
+# COMP90020 - Distributed Algorithms - Team Double-J
+
+This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms - for Semetser 1, 2024.
+
+The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**.
+
+The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase built upon the implementation that was seen in the second; and each is described below on implementation, invoking and design/approach.
+
+## Phase 1 - `phase1_mpi`
 
 
 
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
+## Phase 2 - `phase2_sockets`
 
 - [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
 - [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
