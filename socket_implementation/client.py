@@ -3,7 +3,7 @@ from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
-from shared.vector_clock import incrementVectorClock, mergeClocks
+from shared.vector_clock import canDeliver, incrementVectorClock, mergeClocks
 import socket
 import uuid
 import sys
@@ -62,15 +62,14 @@ def handleMessage(message, receivedMessages, peers):
     # If this processId is the sender of the message
     if message["sender"] == processId:
         print("The VC of the sending proccess - has been incremented")
-     
+  
     # Otherwise receiver
     else:
         messageClock = message['clock']
-        print("Deliver/update the VC of the receiver if causality met")
-        print(messageClock)
-        print("initial process VC", processVectorClock)
+        print("Deliver/update the VC of the receiver if causality met?")
+        print(canDeliver(processVectorClock, message))
+        #print("initial process VC", processVectorClock)
         processVectorClock = mergeClocks(messageClock, processVectorClock)
-        print(processVectorClock)
 
     #TODO processing / handling / message queue / causal delivery
     #TODO
@@ -78,6 +77,7 @@ def handleMessage(message, receivedMessages, peers):
     #for now, just display received messages
     senderName = 'You' if (message['sender'] == processId) else message['sender'] 
     print('[{0}]: {1}'.format(senderName, message['text']))
+    print(processVectorClock)
 
 
 def broadcastToPeers(message, peers):
