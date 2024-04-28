@@ -12,14 +12,27 @@ The repository consists of two main directories - `phase1_mpi` and `phase2_socke
 
 The first phase of this project is implementing the Dynamic Vector Clock Algorithm using **Message Passing Interface** - or MPI for short. 
 
-This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock and Matrix Clock implementations have been developed in this phase -  the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock (`/dynamic_vector_clocks` directory and Matrix Clock (`/matrix_clock` directory) implementations have been developed in this phase -  the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+
+Example input files live in each corresponding implementations' directories listed above within an `/examples` directory. Unicast/broadcast examples are inclusive for both - and are line-by-line seperated with the events that happen at each process. For example, the below file denotes a 3 process system where:
+- Process 1 broadcasts message 1, and receives message 2.
+- Process 2 receives message 1, and broadcasts message 2.
+- Process 3 receives message 1, then receives message 2.
+
+```
+b1, r2
+r1, b2
+r1, r2
+```
+
+In these examples, broadcast messages are denoted by `b<integer>`, unicast messages by `s<integer>`, receive events by `r<integer>` and internal events with an alphabetical character. Important to note is that for send event targeting on the receiving process end, the same integer must be used (i.e `s1` for the sender, `r1` for the receiver).
 
 ### Implementation
 
 The process of these implementations are as follows:
 1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective repositories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
 2. The main algorithm is invoked; Process `0` is responsible for splitting the input line for each process (`1` to `N`) - which is sent at the start of the program.
-3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row. Broadcast messages are denoted by `b<integer>`, unicast messages by `s<integer>`, receive events by `r<integer>` and internal events with an alphabetical character. Important to note is that for an event to send a message picked up by another, the same integer must be used (i.e `s1` for the sender, `r1` for the receiver). Each send event in this example generates a random floating point number to add for corresponding receive/deliveries.
+3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row. Each broadcast or unicast event in the event list will generat a random floating point number to add for corresponding receive and eventual deliveries.
 4. Messages are thus sent and received - but **not** delivered unless the specific causal deliverability condition is met for either algorithm. Both algorithms implement a similar check on the incoming messages' clock. If both of these conditions are met, the message is delivered and the message's number is added to the process's number. Otherwise it is enqueued in a message/hold back queue:
     - The sender's value at its index in the message clock needs to be **exactly greater than 1** comparative to the value of its' value in the process's local clock.
     - Every other value in the message clock that is not of the sender is **less than or equal** to the receiving process's local clock value.
