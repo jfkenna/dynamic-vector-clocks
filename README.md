@@ -30,7 +30,7 @@ In these examples, broadcast messages are denoted by `b<integer>`, unicast messa
 ### Implementation
 
 The process of these implementations are as follows:
-1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective repositories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
+1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective directories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
 2. The main algorithm is invoked; Process `0` is responsible for splitting the input line for each process (`1` to `N`) - which is sent at the start of the program.
 3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row. Each broadcast or unicast event in the event list will generat a random floating point number to add for corresponding receive and eventual deliveries.
 4. Messages are thus sent and received - but **not** delivered unless the specific causal deliverability condition is met for either algorithm. Both algorithms implement a similar check on the incoming messages' clock. If both of these conditions are met, the message is delivered and the message's number is added to the process's number. Otherwise it is enqueued in a message/hold back queue:
@@ -40,6 +40,32 @@ The process of these implementations are as follows:
 6. The `process_loop` is continually invoked until all events received in 2. are exhausted, and the process stops.
 
 ### Invocation
+
+Invocating either algorithms' implementation is achieved by running the shell script that is provided within each directory - `dynamic_vc.sh` for Dynamic Vector clocks, or `matrix_clock.sh` for Matrix Clocks. These scripts expect a `-f` flag and argument to be passed into the script - which is the example input file you'd like to run the implementation against.
+
+For example - running `broadcast1.txt` for Dynamic Vector Clocks after cloning the repository:
+
+```
+cd comp90020-double-j/phase1_mpi/<implementation>
+./dynamic_vc.sh -f examples/broadcast1.txt
+```
+
+The output of the script is the MPI logs and the event timeline for each process. Note the ordering may not always be in order due to the nature of the parallel nature of MPI programs!
+
+```
+|----- Process 2: ['r1'] -----|
+-----------------------
+Event #0 -> r1: (0)
+-----------------------
+Process 2 received number 1.934 from Process 1 @ 10:21:05.536975
+This message satisfied the DVC causal deliverability condition. Delivering.
+1.934 (message number) + 0 (current sum). Process 2's sum = 1.934
+
+Checking messages in the message/hold back queue for deliverability
+No messages are in the message/hold back queue
+DVC after r1:	[[1, 1], [2, 0], [3, 0]]
+Number Sum:	 1.934
+```
 
 ## Phase 2 - `phase2_sockets`
 
