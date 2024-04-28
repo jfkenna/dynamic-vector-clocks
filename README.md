@@ -116,6 +116,7 @@ An example run of two peers communicating with each-other is show below. Every m
 
 #### Peer 1
 
+```
 // python3 client.py 127.0.0.1
 Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'CLIENT_LISTEN_IP': '127.0.0.1'}
 Enter peer IPs/hostnames [enter 'finished' or 'f' to continue]
@@ -133,9 +134,11 @@ Hello!
 I'm doing great - love this application from Team Double-J!
 [9a583352-1dc9-4390-9f1d-496d49221004]: Agreed - every message we send is getting vector clock incremented and causal delivery checked, right?
 Thats correct! :)
+```
 
 #### Peer 2
 
+```
 // python3 client.py 127.0.0.2 
 Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'CLIENT_LISTEN_IP': '127.0.0.2'}
 Enter peer IPs/hostnames [enter 'finished' or 'f' to continue]
@@ -153,3 +156,4 @@ Hi - how are you?
 [fc345072-7e51-49b8-b936-bdc1c9ce168e]: I'm doing great - love this application from Team Double-J!
 Agreed - every message we send is getting vector clock incremented and causal delivery checked, right?
 [fc345072-7e51-49b8-b936-bdc1c9ce168e]: Thats correct! :)
+```
