@@ -9,6 +9,12 @@ import socket
 import uuid
 import sys
 
+def silentFailureClose(connection):
+    try:
+        connection.close()
+    except:
+        pass
+
 def acceptWorker(connectionQueue, serverSocket):
     print('[a0] Started')
     while True:
@@ -36,11 +42,7 @@ def networkWorker(connectionQueue, receivedMessages, peers, id):
         except socket.error:
             print('Error reading from socket: {0}'.format(socket.error))
             print('Closing the connection without attempting to read more')
-            try:
-                connection.shutdown(1)
-                connection.close()
-            except socket.error:
-                continue
+            silentFailureClose(connection)
             continue
         
         message = parseJsonMessage(data, ['type', 'clock', 'text', 'sender', 'id'])
@@ -91,7 +93,7 @@ def broadcastToPeers(message, peers):
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         targetSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
         try:
-            targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
+            connection = targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
         except socket.error:
             failedCount += 1
             print('Error connecting to peer: {0}'.format(socket.error))
@@ -101,13 +103,9 @@ def broadcastToPeers(message, peers):
         except socket.error:
             failedCount += 1
             print('Error sending message to peer: {0}'.format(socket.error))
+            silentFailureClose(connection)
             continue
-        try:
-            targetSocket.shutdown(1)
-            targetSocket.close()
-        except socket.error:
-            print('Error closing socket, continuing...: {0}'.format(socket.error))
-            continue
+        silentFailureClose(connection)
         #print('broadcast {0} to {1}'.format(jsonMessage, peer))
     
     if (failedCount == len(peers)):

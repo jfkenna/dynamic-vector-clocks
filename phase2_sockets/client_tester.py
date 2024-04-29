@@ -17,7 +17,7 @@ def testThread(useSameMessageClock):
     clock = {processId: 1}
     while True:
         clock[processId] += 1 #placeholder, TODO replace with proper incrementing once vector clock implementation is complete
-        text = ''.join([choice(string.ascii_letters) for i in range(0, randint(5, 50))])
+        text = ''.join([choice(string.ascii_letters) for i in range(0, randint(10000, 50000))])
         message = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, clock, text, processId))
         print('Attempt to send message: ', message)
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -8,6 +8,12 @@ from shared.validator import validateEnv
 from shared.server_message import ServerMessageType, constructBasicMessage, constructPeerResponseMessage
 from shared.client_message import parseJsonMessage, messageToJson
 
+def silentFailureClose(connection):
+    try:
+        connection.close()
+    except:
+        pass
+
 def acceptWorker(connectionQueue, serverSocket):
     while True:
         connectionQueue.put(serverSocket.accept())
@@ -47,14 +53,26 @@ def worker(connectionQueue, peers):
         connection, adr = connectionQueue.get()
         #TODO properly read until seperator is reached
         #for now, just assume total message size will be < 1024
-        data = connection.recv(1024)
+        try:
+            data = connection.recv(1024)
+        except socket.error:
+            print('Error reading incoming message')
+            silentFailureClose(connection)
+            continue
+
         parsedMessage = parseJsonMessage(data, ['id', 'type'])
         if parsedMessage == None:
             response = messageToJson(constructBasicMessage(ServerMessageType.BAD_MESSAGE))
-            connection.close()
+            silentFailureClose(connection)
             continue
-        handleMessage(parsedMessage, connection, peers)
-        connection.close()
+
+        try:
+            handleMessage(parsedMessage, connection, peers)
+        except socket.error:
+            print('Error handling message: {0}'.format(socket.error))
+        
+        silentFailureClose(connection)
+        continue
 
 
 def main():
