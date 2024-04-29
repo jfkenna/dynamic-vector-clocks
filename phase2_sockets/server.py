@@ -45,7 +45,7 @@ def handleMessage(message, connection, peers):
 def worker(connectionQueue, peers):
     while True:
         connection, adr = connectionQueue.get()
-        #TODO properly read multiple datagrams until seperator is reached
+        #TODO properly read until seperator is reached
         #for now, just assume total message size will be < 1024
         data = connection.recv(1024)
         parsedMessage = parseJsonMessage(data, ['id', 'type'])

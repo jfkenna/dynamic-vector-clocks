@@ -29,9 +29,20 @@ def networkWorker(connectionQueue, receivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
     while True:
         connection, adr = connectionQueue.get()
-        #TODO properly read multiple datagrams until seperator is reached
-        #for now, just assume total message size will be < 1024
-        data = connection.recv(1024)
+        try:
+            #TODO properly read until seperator is reached
+            #for now, just assume total message size will be < 1024
+            data = connection.recv(100000)
+        except socket.error:
+            print('Error reading from socket: {0}'.format(socket.error))
+            print('Closing the connection without attempting to read more')
+            try:
+                connection.shutdown(1)
+                connection.close()
+            except socket.error:
+                continue
+            continue
+        
         message = parseJsonMessage(data, ['type', 'clock', 'text', 'sender', 'id'])
         if message == None:
             print('[w{0}] Parse error'.format(id))
@@ -72,17 +83,37 @@ def handleMessage(message, receivedMessages, peers):
 
 def broadcastToPeers(message, peers):
     jsonMessage = messageToJson(message)
+    failedCount = 0
     for peer in peers:
         #print("Broadcasting to peer {0}".format(peer))
         #print("trying with peer {0}".format(peer))
-        #TODO add handling for errors, unresponsive peer etc.
-        #TODO check this send logic is OK
+
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
-        targetSocket.send(jsonMessage.encode('utf-8'))
-        targetSocket.shutdown(1)
-        targetSocket.close()
+        targetSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
+        try:
+            targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
+        except socket.error:
+            failedCount += 1
+            print('Error connecting to peer: {0}'.format(socket.error))
+            continue
+        try:
+            targetSocket.send(jsonMessage.encode('utf-8'))
+        except socket.error:
+            failedCount += 1
+            print('Error sending message to peer: {0}'.format(socket.error))
+            continue
+        try:
+            targetSocket.shutdown(1)
+            targetSocket.close()
+        except socket.error:
+            print('Error closing socket, continuing...: {0}'.format(socket.error))
+            continue
         #print('broadcast {0} to {1}'.format(jsonMessage, peer))
+    
+    if (failedCount == len(peers)):
+        #TODO decide on error handling here
+        #maybe try to get a new set of peers from the server, and if that also fails, close completely?
+        print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
 
 
 
@@ -157,7 +188,7 @@ if len(sys.argv) < 2:
 env['CLIENT_LISTEN_IP'] = sys.argv[1]
 
 print('Combined env and argv config:', dict(env))
-if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'PROTOCOL_PORT_SERVER', 'ENABLE_PEER_SERVER']):
+if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'PROTOCOL_PORT_SERVER', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
     print('.env failed validation, exiting...')
     exit()
 
