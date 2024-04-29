@@ -2,6 +2,7 @@ from threading import Thread
 from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
+from shared.validator import validateEnv
 from shared.client_message import constructMessage, parseJsonMessage, messageToJson, MessageType
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 import socket

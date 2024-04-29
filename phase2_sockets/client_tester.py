@@ -5,7 +5,7 @@ import socket
 from threading import Thread
 import time
 import uuid
-from shared.message import constructMessage, MessageType, messageToJson
+from shared.client_message import constructMessage, MessageType, messageToJson
 
 def testThread(useSameMessageClock):
     env = dotenv_values('.env')
