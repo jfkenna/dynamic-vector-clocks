@@ -2,7 +2,7 @@ from threading import Thread
 from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
-from shared.message import constructMessage, parseJsonMessage, messageToJson, MessageType
+from shared.client_message import constructMessage, parseJsonMessage, messageToJson, MessageType
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 import socket
 import uuid
@@ -21,7 +21,6 @@ def sendWorker(outgoingMessageQueue, peers, processId):
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
         processVectorClock = incrementVectorClock(processVectorClock, processId)
-        #clock = {processId: str(uuid.uuid4())} #TODO replace this clock dict with the current vector clock of the process
         outgoingMessage = constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId)
         broadcastToPeers(outgoingMessage, peers)
 
@@ -32,8 +31,7 @@ def networkWorker(connectionQueue, receivedMessages, peers, id):
         #TODO properly read multiple datagrams until seperator is reached
         #for now, just assume total message size will be < 1024
         data = connection.recv(1024)
-        message = parseJsonMessage(data)
-        #print('[w{0}] Recieved message {1}'.format(id, message))
+        message = parseJsonMessage(data, ['type', 'clock', 'text', 'sender', 'id'])
         if message == None:
             print('[w{0}] Parse error'.format(id))
             continue
@@ -70,7 +68,6 @@ def handleMessage(message, receivedMessages, peers):
             processMessageQueue.append(message)
 
         processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
-    #TODO - for now, just display received messages
 
 def broadcastToPeers(message, peers):
     jsonMessage = messageToJson(message)
@@ -87,19 +84,6 @@ def broadcastToPeers(message, peers):
         #print('broadcast {0} to {1}'.format(jsonMessage, peer))
 
 
-def validateEnv(env):
-    # Check if PROTOCOL_PORT/CLIENT_WORKER_THREADS is in dotenv (.env)
-    for required in ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS']:
-        if required not in env:
-            print("Variable {0} is not specified in your dotenv (.env) file!".format(required))
-            return False 
-        
-    # Check if PROTOCOL_PORT is in valid range
-    if not 1 <= int(env['PROTOCOL_PORT']) <= 65535:
-        print("PROTOCOL_PORT is defined as {0}. Needs to be inbetween 1-65535.".format(env['PROTOCOL_PORT']))
-        return False
-    
-    return True
 
 def getPeerHosts():
     initialPeers = []
@@ -162,8 +146,8 @@ def main():
     handlerThreads.join()
 
 
-#handle .env as global variable, outside of scope all all methods
-#parse and validate .env, then call main()
+#handle .env as global variable
+#parse and validate, then call main()
 env = dotenv_values('.env')
 
 if len(sys.argv) < 2:
@@ -172,7 +156,7 @@ if len(sys.argv) < 2:
 env['CLIENT_LISTEN_IP'] = sys.argv[1]
 
 print('Combined env and argv config:', dict(env))
-if not validateEnv(env):
+if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'PROTOCOL_PORT_SERVER', 'ENABLE_PEER_SERVER']):
     print('.env failed validation, exiting...')
     exit()
 
