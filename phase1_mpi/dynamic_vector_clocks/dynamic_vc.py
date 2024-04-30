@@ -35,7 +35,7 @@ def determine_recv_process(event_list, event_tag, event_type):
 
 def generate_message(destinations, process_dvc):
     message_dvc = construct_message_dvc(process_dvc)                # Constuct the DVC for the message
-    r_float = generate_random_float()                               # Generate a random floating point number 
+    r_float = generate_random_float()                               # Generate a random floating-point number 
     # Construct a message
     message = {
         'sender': iproc,                                            # The sender of the message
@@ -50,7 +50,7 @@ def generate_message(destinations, process_dvc):
     return message
 
 def generate_random_float():
-    return round(random.uniform(0, 10), 3)
+    return round(random.uniform(0, 10), 3)                      # Generation of a random floating-point number (0-10), 3 decimal places
 
 # Deliverability Functions
 def can_deliver_message(process_dvc, message):
@@ -68,7 +68,7 @@ def can_deliver_message(process_dvc, message):
         if not x == sender_process_index:                       # If x is NOT the sending process of the message (other processes)
             if not message_dvc[x][1] <= process_dvc[x][1]:      # If the message index value at the other process is greater than the index in the process DVC
                 other_msg_index_valid = False                   # Message needs to be enqueued
-                break
+                break                                           # Break from checking other non-sender indexes
 
     # Causal deliverability condition
     can_deliver = sender_msg_index_valid and other_msg_index_valid  
@@ -83,9 +83,9 @@ def can_deliver_message(process_dvc, message):
     return can_deliver
 
 def deliver_message(proces_dvc, current_number_sum, recv_message):
-    # Upon message delivery - merge the message/process DVCs and increment the sum
-    new_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])       # Merging the DVCs and create new_dvc
-    new_number_sum = current_number_sum + recv_message["number"]        # Add the floating-point numbers and create new_number_sum
+    # Upon message delivery - merge the message/process DVCs and calculate the new sum
+    new_dvc = merge_dvcs(proces_dvc, recv_message["message_dvc"])       # Merging the DVCs to create new_dvc
+    new_number_sum = current_number_sum + recv_message["number"]        # Add the floating-point numbers to create new_number_sum
 
     # Print the incrementation of number_sum upon message delivery
     print("{0} (message number) + {1} (current sum). Process {2}'s sum = {3}".format(
@@ -97,8 +97,8 @@ def deliver_message(proces_dvc, current_number_sum, recv_message):
 
 def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
     # Setting up variables for checking the message/hold-back queue
-    current_dvc = process_dvc               # current_dvc: the processe's original DVC coming into this function
-    current_number_sum = number_sum         # current_number_sum/: the process's original floating-point number
+    current_dvc = process_dvc               # current_dvc: the process's original DVC coming into this function
+    current_number_sum = number_sum         # current_number_sum: the process's original floating-point number
     first_pass = True                       # first_pass: whether the message queue check is in its first pass 
     iterator = 0                            # iterator: iteration integer
 
@@ -184,7 +184,7 @@ def process_loop(event_list, process_events):
                 iproc, str(recv_message["number"]), str(recv_message["sender"]), datetime.now().strftime("%H:%M:%S.%f")
             ))
 
-            # If te message can be delivered now - deliver it.
+            # If the message can be delivered now - deliver it.
             if can_deliver_message(process_dvc, recv_message):
                 process_dvc, number_sum = deliver_message(process_dvc, number_sum, recv_message)
             # Otherwise push it to the message/hold-back queue
@@ -194,7 +194,7 @@ def process_loop(event_list, process_events):
             # Check if any other messages can be delivered in the message/hold-back queue
             process_dvc, number_sum = check_message_queue(process_dvc, number_sum, message_queue, recv_message)
 
-            # Print the current DVC after this event and the current number sum
+            # Print the current DVC after this event/potential deliveries and the current number sum
             print("DVC after {0}:\t{1}".format(event, process_dvc))
             print("Number Sum:\t", number_sum)
   
