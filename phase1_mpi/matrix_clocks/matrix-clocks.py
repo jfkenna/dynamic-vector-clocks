@@ -14,66 +14,71 @@ nproc = comm.Get_size()
 
 # Messaging Functions
 def send_message(message, dest, tag):
-    comm.send(message, dest=dest, tag=int(tag))
+    comm.send(message, dest=dest, tag=int(tag))     # Send the defined message to the dest process with defined tag
 
 def broadcast_message(message, event_tag, dest_processes):
+    # Send the message to all destination processes
     for idx in dest_processes:
-        send_message(message, idx, event_tag)
+        send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag
 
-def determine_recv_process(ops_list, event_tag, event_type):
+def determine_recv_process(event_list, event_tag, event_type):
+    # If the event_type is a send (unicast)
     if event_type == "send":
-        target_event = "r" + event_tag
-        for idx in range(0, len(ops_list)):
-            if target_event in ops_list[idx]:
-                return [idx+1]
+        target_event = "r" + event_tag                              # The target_event is r<event_tag> 
+        for idx in range(0, len(event_list)):                       # For the index range in event_list
+            if target_event in event_list[idx]:                     # If the target_event is in the idx row of the event_list 
+                return [idx+1]                                      # Return the process ID of the row that the target_event is in
+    # If the event_ty[e is a broadcast
     elif event_type == "broadcast":
-        dest_processes = [x for x in range(1, nproc) if x != iproc]
-        return dest_processes
-
+        dest_processes = [x for x in range(1, nproc) if x != iproc] # Define destination processes
+        return dest_processes                                       # Return the destination processes
+    
 def generate_message(destinations, process_matrix):
-    matrix_message = construct_message_matrix_clock(destinations, process_matrix)
-    # Generate a random float
-    r_float = generate_random_float()
+    matrix_message = construct_message_matrix_clock(destinations, process_matrix)       # Constuct the matrix clock for the message
+    r_float = generate_random_float()                               # Generate a random floating-point number 
     # Construct a message
     message = {
-        'sender': iproc,
-        'number': r_float,
-        'matrix_message': matrix_message
+        'sender': iproc,                                            # The sender of the message
+        'number': r_float,                                          # The generated floating-point number
+        'matrix_message': matrix_message                            # The matrix clock affixed to the message
     }
+    # Printing message generation
     print("Process {0} generated message with heading for Process(es) {1}.\nNumber: {2}.\nMC: ".format(
-        iproc,  
-        destinations,
-        r_float
+        iproc, destinations,r_float
     ))
     print(matrix_message)
-
+    # Returning the message
     return message
 
 def generate_random_float():
-    return round(random.uniform(0, 10), 3)
+    return round(random.uniform(0, 10), 3)                          # Generation of a random floating-point number (0-10), 3 decimal places
 
 # Deliverability Functions
 def can_deliver_message(current_matrix, message):
-    message_matrix = message["matrix_message"]
-    recv_process_index = iproc - 1
-    sending_process_index = message["sender"]-1
+    # Variable setup
+    message_matrix = message["matrix_message"]                      # Message matrix clock
+    recv_process_index = iproc - 1                                  # Receiver process index 
+    sending_process_index = message["sender"]-1                     # Sending process index
 
     # Extract both the message and process matrix clock columns of the receiver process's index.
-    message_matrix_column = message_matrix[:,recv_process_index]
-    process_matrix_column = current_matrix[:,recv_process_index]
+    message_matrix_column = message_matrix[:,recv_process_index]    # Message matrix clock column of receiving process
+    process_matrix_column = current_matrix[:,recv_process_index]    # Current matrix clock column of receiving process
     
     # If the value of the i,j value of the row (sender)/column (receiver) is one LESS than the current process's i,j value 
     message_value_valid = message_matrix_column[sending_process_index] - 1 == process_matrix_column[sending_process_index]
-    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
-    other_indexes_valid = True
-    for x in range(nproc-1):
-        if not x == sending_process_index: # Checking all indexes not of the sender
-            if not process_matrix_column[x] >= message_matrix_column[x]: # Ensure process matrix value >= message value in non-sender values
-                other_indexes_valid = False
-                break
 
+    # Other columns of the process's matrix clock (not sender row) is >= the messages's values
+    other_indexes_valid = True                                              # Initially, set other_indexes_valid True (all other known column values valid)
+    for x in range(nproc-1):                                                # For each known process
+        if not x == sending_process_index:                                  # Checking all indexes not of the sender
+            if not process_matrix_column[x] >= message_matrix_column[x]:    # If the process matrix value < message value in the non-sender index
+                other_indexes_valid = False                                 # Message needs to be enqueued
+                break                                                       # Break from checking other non-sender indexes
+                
     # Causal deliverability condition
     can_deliver = message_value_valid and other_indexes_valid
+
+    # Printing out causal delivery conforming, or if the message will need to be enqueud
     if can_deliver: 
         print("This message satisfied the DVC causal deliverability condition. Delivering.")
     else:
@@ -83,72 +88,66 @@ def can_deliver_message(current_matrix, message):
     return can_deliver
 
 def deliver_message(current_matrix, current_number_sum, recv_message):
-    new_matrix = maximum_matrix_values(current_matrix, recv_message["matrix_message"])
-    
-    # Increment the number_sum with the received data
-    new_number_sum = current_number_sum + recv_message["number"]
+    # Upon message delivery - merge the message/process matrix clocks and calculate the new sum
+    new_matrix = maximum_matrix_values(current_matrix, recv_message["matrix_message"])      # Merging the matrix clocks to create new_matrix
+    new_number_sum = current_number_sum + recv_message["number"]                            # Add the floating-point numbers to create new_number_sum 
 
-    # Print the increment
+    # Print the incrementation of number_sum upon message delivery
     print("{0} (message number) + {1} (current sum). Process {2}'s sum = {3}".format(
-        str(recv_message["number"]),
-        current_number_sum,
-        iproc, 
-        str(new_number_sum)
+        str(recv_message["number"]), current_number_sum, iproc, str(new_number_sum)
     ))
 
+    # Return the new matrix clock and number sum for printing at event closure.
     return new_matrix, new_number_sum
 
 def check_message_queue(process_matrix, number_sum, message_queue, recv_message):
-    current_matrix = process_matrix
-    current_number_sum = number_sum
-    first_pass = True
-    iterator = 0
+    # Setting up variables for checking the message/hold-back queue
+    current_matrix = process_matrix         # current_matrix: the process's original matrix clock coming into this function
+    current_number_sum = number_sum         # current_number_sum/: the process's original floating-point number
+    first_pass = True                       # first_pass: whether the message queue check is in its first pass 
+    iterator = 0                            # iterator: iteration integer
 
     # Iterate over until we can't deliver any messages/nothing in the queue
     print("\nChecking messages in the message/hold back queue for deliverability")
     while True:
-        if len(message_queue) >= 1:
-            if iterator == len(message_queue):
-                print("Exhausted all messages. Breaking")
-                break
-            elif message_queue[iterator] == recv_message and first_pass:
-                print("This was the message that was just added - skip it on first pass")
-                iterator += 1 
-            else:
-                queued_message = message_queue[iterator]
-                if can_deliver_message(current_matrix, queued_message):
-                    current_matrix, current_number_sum = deliver_message(current_matrix, current_number_sum, queued_message)
-                    message_queue.pop(iterator)
-                    # Reset iterator to 0
-                    iterator = 0
-                    first_pass = False
-                else:
-                    # Move to the next iteration
-                    iterator += 1
-        else:
-            print("No messages are in the message/hold back queue")
-            break
+        if len(message_queue) >= 1:                                 # If the length of the message_queue is >= 1, messages exist to check for delivery
+            if iterator == len(message_queue):                      # If we've exhaused all messages
+                print("Exhausted all messages. Breaking")           # Notifying of message exhaustion
+                break                                               # Break from the while loop
+            elif message_queue[iterator] == recv_message and first_pass:                    # If the message has just been added to the queue
+                print("This was the message that was just added - skip it on first pass")   # Skip notification - as we've just added this to the queue.
+                iterator += 1                                                               # Increment the iterator
+            else:                                                                           # Otherwise - for all other messages in the queue
+                queued_message = message_queue[iterator]                                    # Grab the next message in the queue      
+                if can_deliver_message(current_matrix, queued_message):                     # If the message can be delivered
+                    current_matrix, current_number_sum = deliver_message(current_matrix, current_number_sum, queued_message)    # Deliver the message and set current matrix clock/sum to new values
+                    message_queue.pop(iterator)                                             # Pop off the message from the queue 
+                    iterator = 0                                                            # Reset the iterator back to 0 (to check all messages again)
+                    first_pass = False                                                      # No longer the first pass
+                else:                                                                       # Otherwise, message can't be delivered
+                    iterator += 1                                                           # Increment the iterator - move to the next message
+        else:                                                           # Message queue is empty
+            print("No messages are in the message/hold back queue")     # Notify of the empty message/hold-back queue
+            break                                                       # Break from the while loop
 
-    return current_matrix, current_number_sum
+    return current_matrix, current_number_sum                           # Return the (potentially) updated matrix clock and number sum
 
 # Matrix Clock Functions
 def maximum_matrix_values(matrix_a, matrix_b):
-    max_matrix = numpy.zeros((nproc-1, nproc-1))
-    for a in range(len(matrix_a)):
-        for b in range(len(matrix_b)):
-            max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])
-    return max_matrix
+    max_matrix = numpy.zeros((nproc-1, nproc-1))                        # Create max_matrix initially of 0s
+    for a in range(len(matrix_a)):                                      # For every row in matrix_a (a in range) 
+        for b in range(len(matrix_b)):                                  # For every row in matrix_b (b in range)
+            max_matrix[a][b] = max(matrix_a[a][b], matrix_b[a][b])      # Element max_matrix[a][b] = max value between the two matrices at that row/column
+    return max_matrix                                                   # Return max_matrix
 
 def construct_message_matrix_clock(destinations, process_matrix):
     # Extract the current matrix clock, sender row
-    message_matrix_clock = process_matrix
-    sender_row = iproc - 1
+    message_matrix_clock = process_matrix                               # Set message_matrix_clock to the current process_matrix
+    sender_row = iproc - 1                                              # Obtain the sender process row
     # Increment destination columns by 1
-    for dest in destinations:
-        message_matrix_clock[sender_row][dest-1] += 1
-
-    # Return the matrix clock to include in the message
-    return message_matrix_clock
+    for dest in destinations:                                           # For each destimation
+        message_matrix_clock[sender_row][dest-1] += 1                   # Increment the destination element by 1
+    return message_matrix_clock                                         # Return the matrix clock to include in the message
 
 def process_loop(event_list, process_events):
     # Process n's matrix
@@ -161,114 +160,110 @@ def process_loop(event_list, process_events):
     for idx, event in enumerate(process_events):
         print("-----------------------\nEvent #{0} -> {1}: ({2})\n-----------------------".format(idx, event, number_sum))
 
-        recv_op = re.search("^r([1-9].*)", event) # If the event was a receive
-        send_op = re.search("^s([1-9].*)", event) # If the event was a send
-        bcast_op = re.search("^b([1-9].*)", event) # If the event was a broadcast
-        internal_op = re.search("^([a-zA-Z].*)", event) # If the event was internal
-        if recv_op:
-            recv_message = None
-            event_tag = recv_op.group(1)
+        recv_op = re.search("^r([1-9].*)", event)               # If the event was a receive
+        send_op = re.search("^s([1-9].*)", event)               # If the event was a send
+        bcast_op = re.search("^b([1-9].*)", event)              # If the event was a broadcast
+        internal_op = re.search("^([a-zA-Z].*)", event)         # If the event was internal
+
+        if recv_op:                         # If the event was a receive
+            recv_message = None             # Set the initial recv_message to None
+            event_tag = recv_op.group(1)    # Parse the event_tag from the first group in recv_op
 
             # Probe for messages, and obtain message from channel
             while True:
-                s = MPI.Status()
-                comm.Probe(tag=int(event_tag), status=s)
-                # If the message in the channel matches the tag this event requires
-                if str(s.tag) == event_tag:
-                    # Set orig_idx (process ID) and obtain recv_message
-                    orig_idx = s.tag
-                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))
-                    break
-        
+                s = MPI.Status()                            # Obtain the MPI Status
+                comm.Probe(tag=int(event_tag), status=s)    # Probe for messages with the deemed event_tag
+                if str(s.tag) == event_tag:                 # If a message in channel matches the event_ta
+                    orig_idx = s.tag                        # Set orig_idx with the status's tag
+                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))     # Receive the message
+                    break                                   # Break from message probing
+            
+            # Print of message retrieval from the channel
             print("Process {0} received number {1} from Process {2} @ {3}".format(
-                iproc, 
-                str(recv_message["number"]),
-                orig_idx,
-                datetime.now().strftime("%H:%M:%S.%f")
+                iproc, str(recv_message["number"]), orig_idx, datetime.now().strftime("%H:%M:%S.%f")
             ))
 
+            # If the message can be delivered now - deliver it.
             if can_deliver_message(process_matrix, recv_message):
                 process_matrix, number_sum = deliver_message(process_matrix, number_sum, recv_message)
+            # Otherwise push it to the message/hold-back queue
             else:
                 message_queue.append(recv_message)
 
+            # Check if any other messages can be delivered in the message/hold-back queue
             process_matrix, number_sum = check_message_queue(process_matrix, number_sum, message_queue, recv_message)
-
+            
+            # Print the current matrix clock after this event/potential deliveries and the current number sum
             print("MC after {0}:\n{1}".format(event, process_matrix))
             print("Number Sum:\t", number_sum)
 
-        elif send_op:
-            event_tag = send_op.group(1)
-            destination_process = determine_recv_process(event_list, event_tag, "send")
-            print("Unicast message to process {0}".format(destination_process))
-            message = generate_message(destination_process, process_matrix)
+        elif send_op:                                                                       # If the event was a send
+            event_tag = send_op.group(1)                                                    # Parse the event_tag from the first group in send_op
+            destination_process = determine_recv_process(event_list, event_tag, "send")     # Determine the receiving process for this message
+            print("Unicast message to process {0}".format(destination_process))             # Printing of upcoming message sending
+            message = generate_message(destination_process, process_matrix)                 # Generate the message (message matrix-clock and floating-point number)
 
+            # Print of imminent message sending to the destination process
             print("Process {0} sending unicast message to Process {1} @ {2}".format(
-                iproc, 
-                destination_process[0],
-                datetime.now().strftime("%H:%M:%S.%f"), 
+                iproc, destination_process[0], datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
-            # Send the message(with generated floating point number and VC) to the destination process
+            # Send the message(with generated floating point number and matrix clock) to the destination process
             send_message(message, destination_process[0], event_tag)
 
-        elif bcast_op:
-            event_tag = bcast_op.group(1)
-            destination_processes = determine_recv_process(event_list, event_tag, "broadcast")
-            print("Broadcast message to Process(es) {0}".format(destination_processes))
-            message = generate_message(destination_processes, process_matrix)
+        elif bcast_op:                                                                          # If the event was a broadcast
+            event_tag = bcast_op.group(1)                                                       # Parse the event_tag from the first group in bcast_op
+            destination_processes = determine_recv_process(event_list, event_tag, "broadcast")  # Determine the receiving process(es) for this broadcast message
+            print("Broadcast message to Process(es) {0}".format(destination_processes))         # Printing of upcoming broadcast message sending
+            message = generate_message(destination_processes, process_matrix)                   # Generate the message (message matrix clock and floating-point number)
 
+            # Print of imminent message broadcast to the destination process(es)
             print("Process {0} broadcasting message to Process(es) {1} @ {2}".format(
-                iproc, 
-                destination_processes,
-                datetime.now().strftime("%H:%M:%S.%f"), 
+                iproc, destination_processes, datetime.now().strftime("%H:%M:%S.%f"), 
             ))
-           
+
+            # Broadcast the message(with generated floating point number and matrix clock) to the destination process(es)
             broadcast_message(message, event_tag, destination_processes)
             
-        elif internal_op:
+        elif internal_op:       # If the event was internal
+            # Print of internal event occuring at the process
             print("Internal event at process {0} internal event {1} @ {2}".format(
-                iproc, 
-                internal_op.group(1),
-                datetime.now().strftime("%H:%M:%S.%f"), 
+                iproc, internal_op.group(1), datetime.now().strftime("%H:%M:%S.%f"), 
             ))
 
-            r_float = generate_random_float()
+            # Generate and add a random floating-point number to this process's current stored number
+            r_float = generate_random_float()       # Generate a random floating-point number    
+            number_sum += r_float                   # Increment the number_sum with the received data
 
-            # Increment the number_sum with the received data
-            number_sum += r_float
-
-            # Print the increment
+            # Print the increment and new number sum
             print("After addition (internal event), Process {0} has number sum {1}".format(
-                iproc, 
-                str(number_sum)
+                iproc, str(number_sum)
             ))
 
 def event_list_from_file(file_loc):
-    event_list = []
-    # Open the file from args (second element)
-    file = open(file_loc)
-    lines = file.readlines()
-    # Append each line to the events list
-    for line in lines:
-        event_list.append(line.strip())
-    return event_list
+    event_list = []                         # Construct an event_list array
+    file = open(file_loc)                   # Open the file determined by sys.argv[1]
+    lines = file.readlines()                # Read the lines of the file
+    for line in lines:                      # For each line that has been read
+        event_list.append(line.strip())     # Append the line to the event_list
+    return event_list                       # Return event_list
 
 def main():
     # Construct event list from second argument (file directory)
-    file_name = sys.argv[1]
-    event_list = event_list_from_file(file_name)
+    file_name = sys.argv[1]                         # Obtain the file_name from sys.argv[1]
+    event_list = event_list_from_file(file_name)    # Create the event_list
 
-    if iproc == 0:
-        sleep(1)
-        for i in range(0, nproc-1):
-            comm.send(event_list[i], dest=i+1, tag=0)
-    else:
-        data = comm.recv(source=0, tag=0)
-        process_events = data.split(", ")
-        print("|----- Process {0}: {1} -----|".format(iproc, process_events))
-        process_loop(event_list, process_events)
-        print("")
+    # Process 0 to coordinate sending of events for each process
+    if iproc == 0:                                          # If process 0
+        sleep(1)                                            # Sleep for a second to induce some delay
+        for i in range(0, nproc-1):                         # For all other processes in the system
+            comm.send(event_list[i], dest=i+1, tag=0)       # Send the corresponding event_list line to that process (row 1, process 1 etc)
+    else:                                                   # If process N (such that N != 0 and N >=1)
+        data = comm.recv(source=0, tag=0)                   # Receive data from process 0
+        process_events = data.split(", ")                   # Split the events obtained by comma
+        print("|----- Process {0}: {1} -----|".format(iproc, process_events))   # Print the induvidual process's events received after splitting
+        process_loop(event_list, process_events)            # Invoke the main process_loop
+        print("")                                           # Formatting
 
 main()
 
