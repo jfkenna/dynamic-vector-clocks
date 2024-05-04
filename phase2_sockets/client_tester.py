@@ -5,7 +5,8 @@ import socket
 from threading import Thread
 import time
 import uuid
-from shared.message import constructMessage, MessageType, messageToJson
+from shared.client_message import constructMessage, MessageType, messageToJson
+from shared.network import sendWithHeaderAndEncoding
 
 def testThread(useSameMessageClock):
     env = dotenv_values('.env')
@@ -17,12 +18,12 @@ def testThread(useSameMessageClock):
     clock = {processId: 1}
     while True:
         clock[processId] += 1 #placeholder, TODO replace with proper incrementing once vector clock implementation is complete
-        text = ''.join([choice(string.ascii_letters) for i in range(0, randint(5, 50))])
+        text = ''.join([choice(string.ascii_letters) for i in range(0, randint(10000, 50000))])
         message = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, clock, text, processId))
         print('Attempt to send message: ', message)
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         targetSocket.connect(('', int(env['PROTOCOL_PORT'])))
-        targetSocket.send(message.encode('utf-8'))
+        sendWithHeaderAndEncoding(targetSocket, message)
         targetSocket.shutdown(1)
         targetSocket.close()
 
