@@ -92,13 +92,13 @@ def check_message_queue(process_matrix, number_sum, message_queue, recv_message)
             else:                                                                           # Otherwise - for all other messages in the queue
                 queued_message = message_queue[iterator]                                    # Grab the next message in the queue      
                 if can_deliver_message(current_matrix, queued_message):                     # If the message can be delivered
-                    print("This message satisfied the causal deliverability condition. Will be delivered.")     # Message will be delivered
+                    print("This queued message satisfied the causal deliverability condition. Will be delivered.")     # Message will be delivered
                     current_matrix, current_number_sum = deliver_message(current_matrix, current_number_sum, queued_message)    # Deliver the message and set current matrix clock/sum to new values
                     message_queue.pop(iterator)                                             # Pop off the message from the queue 
                     iterator = 0                                                            # Reset the iterator back to 0 (to check all messages again)
                     first_pass = False                                                      # No longer the first pass
                 else:                                                                       # Otherwise, message can't be delivered
-                    print("This message did not satisfy the causal deliverability condition. Will remain enqueued.")    # Message remains in the queue
+                    print("This queued message did not satisfy the causal deliverability condition. Will remain enqueued.")    # Message remains in the queue
                     iterator += 1                                                           # Increment the iterator - move to the next message
         else:                                                           # Message queue is empty
             print("No messages are in the message/hold back queue")     # Notify of the empty message/hold-back queue
