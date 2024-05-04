@@ -10,9 +10,9 @@ The repository consists of two main directories - `phase1_mpi` and `phase2_socke
 
 ### Approach
 
-The first phase of this project is implementing the Dynamic Vector Clock Algorithm using **Message Passing Interface** - or MPI for short. 
+The first phase of this project is implementing the Dynamic Vector Clock (DVC) Algorithm using **Message Passing Interface** - or MPI for short. 
 
-This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock (`dynamic_vector_clocks.py`) and Matrix Clock (`/matrix_clock.py`) implementations have been developed in this phase - the logic for checking for causal delivery in each slightly different, but applied in a similar way; shared functionality exists in the `/shared` directory.
+This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock (`dynamic_vector_clocks.py`) and Matrix Clock (MC) (`/matrix_clock.py`) implementations have been developed in this phase - the logic for checking for causal delivery in each slightly different, but applied in a similar way; shared functionality exists in the `/shared` directory.
 
 Example input files live in this phases' `/examples` directory - this containing subdirectories for each `/dynamic_vector_clocks` and `/matrix_clocks` with specific examples. Unicast/broadcast examples are inclusive for both - and are line-by-line seperated with the events that happen at each process. For example, the below file denotes a 3 process system where:
 - Process 1 **broadcasts** message 1, and **receives** message 2 (from Process 2).
@@ -30,7 +30,7 @@ In these examples, broadcast messages are denoted by `b<integer>`, unicast messa
 ### Implementation
 
 The process of these implementations are as follows:
-1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective directories with Phase 1's invocation file to utilise. For example, `./phase1_invoke.sh -f examples/dynamic_vector_clocks/broadcast3.txt -a dvc` to run Example 5 (`-f` flag and value) for Dynamic Vector clocks (`-a` flag and value) with 4 nodes. The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically for the specific implementation pased in.
+1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective directories with Phase 1's invocation file to utilise. For example, `./phase1_invoke.sh -f examples/dynamic_vector_clocks/b1_3_node_simple_valid.txt -a dvc`: requiring `-f <file>` (flag and value) `-a <algorithm>` (flag and value); this example running the DVC implementation for an invalid/causal queueing scenario using 4 nodes. The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically for the specific implementation pased in.
 2. The main algorithm is invoked; Process `0` is responsible for splitting the input line for each process (`1` to `N`) - which is sent at the start of the program.
 3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row - and each event is determined and actioned upon. Each process holds onto a local clock, message/hold-back queue and floating-point number to add with message deliveries. On the latter - whenever a process is to send a broadcast/unicast message, it will generate a random floating-point number to add for corresponding receives and eventual deliveries.
 4. Messages are thus sent and received - but **not** delivered unless the specific causal deliverability condition is met for either algorithm. Both algorithms implement a similar check on the incoming messages' clock. If both of these conditions are met, the message is delivered and the message's number is added to the process's number. Otherwise it is enqueued in a message/hold back queue:
@@ -43,29 +43,53 @@ The process of these implementations are as follows:
 
 Invocating either algorithms' implementation is achieved by running the shell script that is provided within Phase 1's root directory - `phase1_invoke.sh`. This script expects two flag and valies `-f <file>` - the example input file you'd like to run the implementation against - and `-a <dvc|matrix>` - either `dvc` or `matrix` to invoke each algorithm's implementation respectfully. The script will calculate the number of processes needed based on the file given and will run `mpiexec` dynamically based on your input.
 
-For example - running `broadcast1.txt` for Dynamic Vector Clocks after cloning the repository:
+For example - running `b8_4_node_invalid.txt` for DVCs after cloning the repository:
 
 ```
 git clone git@gitlab.eng.unimelb.edu.au:jsammut/comp90020-double-j.git
 cd comp90020-double-j/phase1_mpi/<implementation>
-./phase1_invoke.sh -f examples/dynamic_vector_clocks/broadcast1.txt -a dvc
+./phase1_invoke.sh -f examples/dynamic_vector_clocks/b8_4_node_invalid.txt -a dvc
 ```
 
 The output of the script is the MPI logs and the event timeline for each process. Note the ordering may not always be in order due to the nature of the parallel nature of MPI programs!
 
 ```
-|----- Process 2: ['r1'] -----|
+|----- Process 4: ['r1', 'r3', 'r2'] -----|
 -----------------------
 Event #0 -> r1: (0)
 -----------------------
-Process 2 received number 1.934 from Process 1 @ 10:21:05.536975
+Process 4 received number 9.444 from Process 1 @ 16:27:16.548878
 This message satisfied the DVC causal deliverability condition. Delivering.
-1.934 (message number) + 0 (current sum). Process 2's sum = 1.934
+9.444 (message number) + 0 (current sum). Process 4's sum = 9.444
 
 Checking messages in the message/hold back queue for deliverability
 No messages are in the message/hold back queue
-DVC after r1:	[[1, 1], [2, 0], [3, 0]]
-Number Sum:	 1.934
+DVC after r1:	[[1, 1], [2, 0], [3, 0], [4, 0]]
+Number Sum:	 9.444
+-----------------------
+Event #1 -> r3: (9.444)
+-----------------------
+Process 4 received number 4.01 from Process 3 @ 16:27:16.549633
+This message did not satisfy the DVC causal deliverability condition. Will be enqueued.
+
+Checking messages in the message/hold back queue for deliverability
+This was the message that was just added - skipping it on first pass
+Exhausted all messages. Breaking
+DVC after r3:	[[1, 1], [2, 0], [3, 0], [4, 0]]
+Number Sum:	 9.444
+-----------------------
+Event #2 -> r2: (9.444)
+-----------------------
+Process 4 received number 6.632 from Process 2 @ 16:27:16.549716
+This message satisfied the DVC causal deliverability condition. Delivering.
+6.632 (message number) + 9.444 (current sum). Process 4's sum = 16.076
+
+Checking messages in the message/hold back queue for deliverability
+This queued message satisfied the causal deliverability condition. Will be delivered.
+4.01 (message number) + 16.076 (current sum). Process 4's sum = 20.086
+No messages are in the message/hold back queue
+DVC after r2:	[[1, 1], [2, 1], [3, 1], [4, 0]]
+Number Sum:	 20.086
 ```
 
 ## Phase 2 - `phase2_sockets`

@@ -1,0 +1,5 @@
+b1, r3, r2, s4, r5, r6
+r1, a, b2, r3, b, r5, r6 
+r1, r2, b3, c, d, r5, r6
+e, r2, r1, f, r3, b5, r6
+r4, g, r2, r1, r3, r5, b6
