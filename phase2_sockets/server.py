@@ -25,14 +25,14 @@ def handleMessage(message, connection, peers):
         case ServerMessageType.GET_PEERS:
             with lock:
                 response = messageToJson(constructPeerResponseMessage(list(peers.keys())))
-            connection.send(response.encode('utf-8'))
+            sendWithHeaderAndEncoding(connection, response)
 
         case ServerMessageType.REGISTER_PEER:
             peerKey = connection.getpeername()[0]
             with lock:
                 peers[peerKey] = True
             response = messageToJson(constructBasicMessage(ServerMessageType.OK))
-            connection.send(response.encode('utf-8'))
+            sendWithHeaderAndEncoding(connection, response)
 
         case ServerMessageType.DEREGISTER_PEER:
             peerKey = connection.getpeername()[0]
@@ -40,11 +40,11 @@ def handleMessage(message, connection, peers):
                 if peerKey in peers:
                     del peers[peerKey]
             response = messageToJson(constructBasicMessage(ServerMessageType.OK))
-            connection.send(response.encode('utf-8'))
+            sendWithHeaderAndEncoding(connection, response)
 
         case _:
             response = messageToJson(constructBasicMessage(ServerMessageType.BAD_MESSAGE))
-            connection.send(response.encode('utf-8'))
+            sendWithHeaderAndEncoding(connection, response)
     print('After operation {0}'.format(peers))
     return
 

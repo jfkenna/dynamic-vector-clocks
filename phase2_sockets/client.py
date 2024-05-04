@@ -1,4 +1,4 @@
-from threading import Thread
+from threading import Thread, Lock
 from queue import Queue
 from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
@@ -36,9 +36,15 @@ def networkWorker(connectionQueue, receivedMessages, peers, id):
     while True:
         connection, adr = connectionQueue.get()
         try:
-            #TODO properly read until seperator is reached
-            #for now, just assume total message size will be < 1024
-            data = connection.recv(100000)
+            #attempt to read a single message from the connection
+            data = readSingleMessage(connection)
+
+            #socket closed before full message length was read
+            if data == None:
+                print('Error reading from socket - connection closed before full header length could be reader')
+                silentFailureClose(connection)
+                continue
+
         except socket.error:
             print('Error reading from socket: {0}'.format(socket.error))
             print('Closing the connection without attempting to read more')
@@ -62,10 +68,11 @@ def UIWorker(outgoingMessageQueue):
 def handleMessage(message, receivedMessages, peers):
     global processVectorClock
     global processMessageQueue
-    if message['id'] in receivedMessages:
-        return
-    #add to list of received messages
-    receivedMessages[message['id']] = True
+    with messageLock:
+        if message['id'] in receivedMessages:
+            return
+        #add to list of received messages
+        receivedMessages[message['id']] = True
     
     #print("Sender:",message["sender"])
     #print("Receiver:",processId)
@@ -99,7 +106,7 @@ def broadcastToPeers(message, peers):
             print('Error connecting to peer: {0}'.format(socket.error))
             continue
         try:
-            targetSocket.send(jsonMessage.encode('utf-8'))
+            sendWithHeaderAndEncoding(connection, jsonMessage)
         except socket.error:
             failedCount += 1
             print('Error sending message to peer: {0}'.format(socket.error))
@@ -139,7 +146,9 @@ def main():
     #suprisingly, default python queue is thread-safe and blocks on .get()
     connectionQueue = Queue()
     outgoingMessageQueue = Queue()
-    receivedMessages = {} #TODO check if map is thread safe
+    
+    #use with 'messageLock' to ensure mutex
+    receivedMessages = {}
 
     #TODO consider adding new peers at runtime based on received messages, so network is more fault tolerant
     #this is an extension, so for our first implementation just start with a fixed set of peers that we can multicast to
@@ -189,6 +198,9 @@ print('Combined env and argv config:', dict(env))
 if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'PROTOCOL_PORT_SERVER', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
     print('.env failed validation, exiting...')
     exit()
+
+#global lock for received messages
+messageLock = Lock()
 
 #to be used in our vector clocks as the process identifier
 #e.g. [UUID-AAAAAA   1]

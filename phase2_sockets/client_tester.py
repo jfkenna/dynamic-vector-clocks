@@ -22,7 +22,7 @@ def testThread(useSameMessageClock):
         print('Attempt to send message: ', message)
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         targetSocket.connect(('', int(env['PROTOCOL_PORT'])))
-        targetSocket.send(message.encode('utf-8'))
+        sendWithHeaderAndEncoding(targetSocket, message)
         targetSocket.shutdown(1)
         targetSocket.close()
 

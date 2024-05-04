@@ -30,7 +30,7 @@ def testThread(useSameMessageClock):
         print('Attempt to send message: ', message)
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         targetSocket.connect((ip, int(env['PROTOCOL_PORT_SERVER'])))
-        targetSocket.send(message.encode('utf-8'))
+        sendWithHeaderAndEncoding(targetSocket, message)
         readMessage = targetSocket.recv(1024)
         print(parseJsonMessage(readMessage, ['type', 'id']))
         targetSocket.shutdown(1)
