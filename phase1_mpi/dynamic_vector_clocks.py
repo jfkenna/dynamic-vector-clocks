@@ -212,7 +212,6 @@ def process_loop(event_list, process_events):
                     iproc, event_result[0].group(1), datetime.now().strftime("%H:%M:%S.%f"), 
                 ))
 
-                process_dvc = increment_dvc(process_dvc)    # Increment the DVC (process's internal event) 
                 print(process_dvc)                          # Print out the current Process's DVC
 
 def main():
