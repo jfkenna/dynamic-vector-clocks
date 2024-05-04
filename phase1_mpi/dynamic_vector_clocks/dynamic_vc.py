@@ -20,15 +20,20 @@ class EventType(IntEnum):
     INTERNAL_EVENT = 3
 
 def determine_and_extract_event(event):
-    if re.match("^r([1-9].*)", event):
+    # If the event is a receive event
+    if re.match("^r([1-9].*)", event):      
         return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
+    # If the event is a send/unicast event
     elif re.match("^s([1-9].*)", event):
         return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
+    # If the event is a broadcast event
     elif re.match("^b([1-9].*)", event):
         return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
+    # If the event is an internal process event
     elif re.match("^([a-zA-Z].*)", event):
         return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-    else: # Assume its an internal event
+    # Othwerwise - based on some combination not recognized - assume its an internal process event
+    else: 
         return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
 
 # Messaging Functions
@@ -178,11 +183,16 @@ def process_loop(event_list, process_events):
 
     for idx, event in enumerate(process_events):
         print("-----------------------\nEvent #{0} -> {1}: ({2})\n-----------------------".format(idx, event, number_sum))
+
+        # Match the event and extract details via regex
         event_result = determine_and_extract_event(event)
+
+        # Match based on the second element of event_result (event type)
         match event_result[1]:
+            # If the event is a receive event
             case EventType.RECEIVE_EVENT:
                 recv_message = None             # Set the initial recv_message to None
-                event_tag = event_result[0].group(1)    # Parse the event_tag from the first group in recv_op
+                event_tag = event_result[0].group(1)    # Parse the event_tag from the first group in event_result[0]
 
                 # Probe for messages, and obtain message from channel should one be sent
                 while True:
@@ -210,12 +220,13 @@ def process_loop(event_list, process_events):
                 # Print the current DVC after this event/potential deliveries and the current number sum
                 print("DVC after {0}:\t{1}".format(event, process_dvc))
                 print("Number Sum:\t", number_sum)
-                
+
+            # If the event is a broadcast event
             case EventType.BROADCAST_EVENT:
-                event_tag = event_result[0].group(1)                                                       # Parse the event_tag from the first group in bcast_op
-                destination_processes = determine_recv_process(event_list, event_tag, EventType.BROADCAST_EVENT)  # Determine the receiving process(es) for this broadcast message
-                print("Broadcast message to process(es) {0}".format(destination_processes))         # Printing of upcoming broadcast message sending
-                message = generate_message(destination_processes, process_dvc)                      # Generate the message (message DVC and floating-point number)
+                event_tag = event_result[0].group(1)                                                                # Parse the event_tag from the first group in event_result[0]
+                destination_processes = determine_recv_process(event_list, event_tag, EventType.BROADCAST_EVENT)    # Determine the receiving process(es) for this broadcast message
+                print("Broadcast message to process(es) {0}".format(destination_processes))                         # Printing of upcoming broadcast message sending
+                message = generate_message(destination_processes, process_dvc)                                      # Generate the message (message DVC and floating-point number)
 
                 # Print of imminent message broadcast to the destination process(es)
                 print("Process {0} broadcasting message to Process(es) {1} @ {2}".format(
@@ -225,11 +236,12 @@ def process_loop(event_list, process_events):
                 # Broadcast the message(with generated floating point number and DVC) to the destination process(es)
                 broadcast_message(message, event_tag, destination_processes)
 
+            # If the event is a send/unicast event
             case EventType.UNICAST_EVENT:
-                event_tag = event_result[0].group(1)                                                    # Parse the event_tag from the first group in send_op
-                destination_process = determine_recv_process(event_list, event_tag, EventType.UNICAST_EVENT)     # Determine the receiving process for this message
-                print("Unicast message to process {0}".format(destination_process))             # Printing of upcoming message sending
-                message = generate_message(destination_process, process_dvc)                    # Generate the message (message DVC and floating-point number)
+                event_tag = event_result[0].group(1)                                                            # Parse the event_tag from the first group in event_result[0]
+                destination_process = determine_recv_process(event_list, event_tag, EventType.UNICAST_EVENT)    # Determine the receiving process for this message
+                print("Unicast message to process {0}".format(destination_process))                             # Printing of upcoming message sending
+                message = generate_message(destination_process, process_dvc)                                    # Generate the message (message DVC and floating-point number)
                 
                 # Print of imminent message sending to the destination process
                 print("Process {0} sending unicast message to Process {1} @ {2}".format(
@@ -238,6 +250,8 @@ def process_loop(event_list, process_events):
 
                 # Send the message(with generated floating point number and DVC) to the destination process
                 send_message(message, destination_process[0], event_tag)
+
+            # If the event is an internal process event
             case EventType.INTERNAL_EVENT:
                 # Print of internal event occuring at the process
                 print("Process {0} internal event {1} @ {2}".format(
