@@ -24,19 +24,24 @@ from kivy.graphics import *
 from kivy.uix.label import Label
 from kivy.properties import ListProperty
 from kivy.uix.recycleboxlayout import RecycleBoxLayout
+from kivy.clock import Clock
 
 Builder.load_string('''
 
 <AlignedLabel>:
-    halign: 'left'
+    #halign: 'left'
+    text_size: self.width, None
+    markup: True
 
-<TEST>:
+<Messages>:
     viewclass: 'AlignedLabel'
     bar_width: dp(5)
+    size_hint: (1, 1)
     scroll_type: ["bars", "content"]
     RecycleBoxLayout:
-        size_hint_y: None
+        size_hint: (1, None)
         height: self.minimum_height
+        default_size_hint: 1, None
         orientation: 'vertical'
         row_default_height: 60
 
@@ -58,17 +63,20 @@ Builder.load_string('''
                 Rectangle:
                     size: self.size
                     pos: self.pos
+            Label:
+                text: 'Hello?'
+                color: (0,0,0,1)
         BoxLayout:
             id: 'middle'
             orientation: 'horizontal'
             size_hint: (1, .75)
             canvas.before:
                 Color:
-                    rgba: (0.3,0.3,0.3,1)
+                    rgba: (0.8,0.8,0.8,1)
                 Rectangle:
                     size: self.size
                     pos: self.pos
-            TEST
+            Messages
         BoxLayout:
             orientation: 'horizontal'
             size_hint: (1, .15)
@@ -86,50 +94,41 @@ Builder.load_string('''
                 text:'Send'
                 background_color: (0,0,1,1)
                 size_hint: (.2, 1)
-                on_release: root.testAdd
+                on_release: root.addMessage()
 ''')
 
 
-class TEST(RecycleView):
+class Messages(RecycleView):
     def __init__(self, **kwargs):
-        super(TEST, self).__init__(**kwargs)
-        self.data = [{'text': str(x)} for x in range(5)]
+        super(Messages, self).__init__(**kwargs)
+        self.data = []
     def addMessage(self, msg):
         self.data.append({'text': msg})
 
 
-
-#TODO - Do the text colouring in markup instead of in the .kv
-#e.g. Label(text='[color=ff3333]Hello[/color][color=3333ff]World[/color]'
 class AlignedLabel(Label):
     def __init__(self, **kwargs):
         super(AlignedLabel, self).__init__(**kwargs)
 
 class MainScreen(BoxLayout):
-        def nothing():
-            print('a')
+        def addMessage(self):
+            global outgoingMessageQueue
+            textbox = App.get_running_app().root.children[0].children[0].children[1]
+            message = textbox.text
+            outgoingMessageQueue.put(message)
+            textbox.text = ''
+            styledMessage ='[color=023020][You]: [/color][color=000000]{0}[/color]'.format(message)
+            App.get_running_app().root.children[0].children[1].children[0].addMessage(styledMessage)
 
 class GUI(App):
+           
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        TESTMessages = ['hello']
-        TESTErrors = ['errorabc']
-        TESTQueue = Queue()
 
-        def testGUI(TESTMessages):
-            while True:
-                time.sleep(1)
-                TESTObject = App.get_running_app().root.children[0].children[1].children[0]
-                TESTObject.addMessage(msg)
-        
-        inputThread = Thread(target=testGUI, args=(TESTMessages))
-        inputThread.start()
-
-    #might need to annotate this? Not sure
-    #@mainthread
-    def addMessage(self):
-        print('HELLO WORLD')
-        
+    def setStatusMessage(self, status):
+        print(App.get_running_app().root.children[0].children[2].children[0])
+        print("Attempting to set status")
+        App.get_running_app().root.children[0].children[2].children[0].text = status
 
     def build(self):
         return MainScreen()
@@ -155,6 +154,10 @@ def sendWorker(outgoingMessageQueue, peers, processId):
         processVectorClock = incrementVectorClock(processVectorClock, processId)
         outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
         broadcastToPeers(outgoingMessage, peers)
+
+        #TODO remove
+        #just for test purposes
+        statusUpdateGUI('STATUS UPDATE SUCCESS!')
 
 def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
@@ -263,6 +266,16 @@ def UIWorker(outgoingMessageQueue):
         outgoingMessageQueue.put(newMessageText)
 
 
+#TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
+#OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
+def textUpdateGUI(sender, message):
+    #allow user to specify their own markdown in messages
+    styledMessage ='[color=800020][{0}]: [/color][color=000000]{1}[/color]'.format(sender, message)
+    Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(styledMessage), 0.001)
+
+def statusUpdateGUI(status):
+    Clock.schedule_once(lambda dt: App.get_running_app().setStatusMessage(status), 0.001)
+
 def handleMessage(message, receivedMessages, peers):
 
     with messageLock:
@@ -292,11 +305,12 @@ def handleMessage(message, receivedMessages, peers):
     jsonMessage = messageToJson(message)
     broadcastToPeers(jsonMessage, peers)
     # If this processId is the sender of the message
-    if not message["sender"] == processId:
+    if not message['sender'] == processId:
         #print("Deliver/update the VC of the receiver if causality met?")
         if canDeliver(processVectorClock, message):
             #print("initial process VC", processVectorClock)
             processVectorClock = deliverMessage(processVectorClock, message, processId)
+            textUpdateGUI(message['sender'], message['text'])
         else:
             processMessageQueue.append(message)
 
@@ -388,17 +402,10 @@ def sayHello(peers):
         registerAndCompleteInitialisation()
 
 def main():
-    GUI().run()
-
-
-
-    #apparently logic like the below can be used to update GUI elements
-    #App.get_running_app().root.text='new text'
 
     #create shared resources
     #suprisingly, default python queue is thread-safe and blocks on .get()
     connectionQueue = Queue()
-    outgoingMessageQueue = Queue()
     
     #use with 'messageLock' to ensure mutex
     receivedMessages = {}
@@ -489,14 +496,10 @@ def main():
     while not initialisationComplete.is_set():
         time.sleep(0.1)
 
-    #UI input thread
-    inputThread = Thread(target=UIWorker, args=(outgoingMessageQueue, ))
-    inputThread.start()
+    GUI().run()
 
-    inputThread.join()
-    sendThread.join()
-    acceptThread.join()
-    handlerThreads.join()
+    #TODO
+    #should interrupt the threads before exiting...
 
 
 #handle .env as global variable
@@ -520,6 +523,9 @@ if (int(env['ENABLE_PEER_SERVER']) == 1):
     env['PEER_REGISTRY_IP'] = sys.argv[2]
 
 print('Combined env and argv config:', dict(env))
+
+#globally shared outgoing message queue
+outgoingMessageQueue = Queue()
 
 #global lock for received message dict
 messageLock = Lock()
