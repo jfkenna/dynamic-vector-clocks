@@ -8,6 +8,7 @@ import time
 import uuid
 from shared.client_message import messageToJson, parseJsonMessage
 from shared.server_message import ServerMessageType, constructBasicMessage
+from shared.network import sendWithHeaderAndEncoding
 
 def buildRandomMessage():
     match randint(0, 3):

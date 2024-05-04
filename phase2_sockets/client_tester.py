@@ -6,6 +6,7 @@ from threading import Thread
 import time
 import uuid
 from shared.client_message import constructMessage, MessageType, messageToJson
+from shared.network import sendWithHeaderAndEncoding
 
 def testThread(useSameMessageClock):
     env = dotenv_values('.env')

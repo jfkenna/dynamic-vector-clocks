@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from shared.validator import validateEnv
 from shared.client_message import constructMessage, parseJsonMessage, messageToJson, MessageType
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
+from shared.network import sendWithHeaderAndEncoding, readSingleMessage
 import socket
 import uuid
 import sys
@@ -41,7 +42,7 @@ def networkWorker(connectionQueue, receivedMessages, peers, id):
 
             #socket closed before full message length was read
             if data == None:
-                print('Error reading from socket - connection closed before full header length could be reader')
+                print('Error reading from socket - connection closed before full header length could be read')
                 silentFailureClose(connection)
                 continue
 
@@ -100,19 +101,19 @@ def broadcastToPeers(message, peers):
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         targetSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
         try:
-            connection = targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
+            targetSocket.connect((peer, int(env['PROTOCOL_PORT'])))
         except socket.error:
             failedCount += 1
             print('Error connecting to peer: {0}'.format(socket.error))
             continue
         try:
-            sendWithHeaderAndEncoding(connection, jsonMessage)
+            sendWithHeaderAndEncoding(targetSocket, jsonMessage)
         except socket.error:
             failedCount += 1
             print('Error sending message to peer: {0}'.format(socket.error))
-            silentFailureClose(connection)
+            silentFailureClose(targetSocket)
             continue
-        silentFailureClose(connection)
+        silentFailureClose(targetSocket)
         #print('broadcast {0} to {1}'.format(jsonMessage, peer))
     
     if (failedCount == len(peers)):

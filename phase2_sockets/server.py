@@ -7,6 +7,7 @@ from dotenv import dotenv_values
 from shared.validator import validateEnv
 from shared.server_message import ServerMessageType, constructBasicMessage, constructPeerResponseMessage
 from shared.client_message import parseJsonMessage, messageToJson
+from shared.network import sendWithHeaderAndEncoding
 
 def silentFailureClose(connection):
     try:
