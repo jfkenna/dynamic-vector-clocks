@@ -4,6 +4,7 @@ from datetime import datetime
 from time import sleep
 from shared.events import EventType, determine_and_extract_event
 from shared.message import determine_recv_process, generate_random_float, send_message, broadcast_message
+from shared.setup import event_list_from_file
 import sys
 
 # MPI World Setup 
@@ -214,14 +215,6 @@ def process_loop(event_list, process_events):
                 process_dvc = increment_dvc(process_dvc)    # Increment the DVC (process's internal event) 
                 print(process_dvc)                          # Print out the current Process's DVC
 
-def event_list_from_file(file_loc):
-    event_list = []                         # Construct an event_list array
-    file = open(file_loc)                   # Open the file determined by sys.argv[1]
-    lines = file.readlines()                # Read the lines of the file
-    for line in lines:                      # For each line that has been read
-        event_list.append(line.strip())     # Append the line to the event_list
-    return event_list                       # Return event_list
-
 def main():
     # Construct event list from second argument (file directory)
     file_name = sys.argv[1]                         # Obtain the file_name from sys.argv[1]
@@ -267,6 +260,7 @@ References
 [22] note.nkmk.me. "How to return multiple values from a function in Python". note.nkmk.me. https://note.nkmk.me/en/python-function-return-multiple-values/ (accessed Apr. 2, 2024).
 [23] A. Luiz. "How do you extract a column from a multi-dimensional array?". Stack Overflow. https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array (accessed Apr. 2, 2024).
 [24] W3Schools. "Python Remove Array Item". W3Schools. https://www.w3schools.com/python/gloss_python_array_remove.asp (accessed Apr. 2, 2024).
-[25] nobody. "Python regular expressions return true/false". https://stackoverflow.com/questions/6576962/python-regular-expressions-return-true-false (accessed May. 6, 2024).
-[26] A. Jalli. "Python Switch Case -- Comprehensive Guide". https://medium.com/@artturi-jalli/python-switch-case-9cd0014759e4 (accessed May. 4, 2024).
+[25] nobody. "Python regular expressions return true/false". Stack Overflow. https://stackoverflow.com/questions/6576962/python-regular-expressions-return-true-false (accessed May. 6, 2024).
+[26] A. Jalli. "Python Switch Case -- Comprehensive Guide". Medium. https://medium.com/@artturi-jalli/python-switch-case-9cd0014759e4 (accessed May. 4, 2024).
+[27] Linuxize. "Bash if..else Statement". Linuxize. https://stackoverflow.com/questions/67428689/how-to-pass-multiple-flag-and-multiple-arguments-in-getopts-in-shell-script (accessed May. 4, 2024).
 '''
