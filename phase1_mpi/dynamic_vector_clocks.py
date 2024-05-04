@@ -50,12 +50,6 @@ def can_deliver_message(process_dvc, message):
     # Causal deliverability condition
     can_deliver = sender_msg_index_valid and other_msg_index_valid  
 
-    # Printing out causal delivery conforming, or if the message will need to be enqueud
-    if can_deliver: 
-        print("This message satisfied the DVC causal deliverability condition. Delivering.")
-    else:
-        print("This message did not satisfy the DVC causal deliverability condition. Will be enqueued.")
-
     # Return the causal deliverability condition
     return can_deliver
 
@@ -92,11 +86,13 @@ def check_message_queue(process_dvc, number_sum, message_queue, recv_message):
             else:                                                                                       # Otherwise - for all other messages in the queue
                 queued_message = message_queue[iterator]                                                # Grab the next message in the queue                                     
                 if can_deliver_message(current_dvc, queued_message):                                    # If the message can be delivered
+                    print("This message satisfied the causal deliverability condition. Will be delivered.")     # Message will be delivered
                     current_dvc, current_number_sum = deliver_message(current_dvc, current_number_sum, queued_message)      # Deliver the message and set current DVC/sum to new values
                     message_queue.pop(iterator)                                                         # Pop off the message from the queue 
                     iterator = 0                                                                        # Reset the iterator back to 0 (to check all messages again)
                     first_pass = False                                                                  # No longer the first pass
                 else:                                                                                   # Otherwise, message can't be delivered
+                    print("This message did not satisfy the causal deliverability condition. Will remain enqueued.")    # Message remains in the queue
                     iterator += 1                                                                       # Increment the iterator - move to the next message
         else:                                                                       # Message queue is empty
             print("No messages are in the message/hold back queue")                 # Notify of the empty message/hold-back queue
@@ -163,9 +159,11 @@ def process_loop(event_list, process_events):
 
                 # If the message can be delivered now - deliver it.
                 if can_deliver_message(process_dvc, recv_message):
+                    print("This message satisfied the DVC causal deliverability condition. Delivering.")
                     process_dvc, number_sum = deliver_message(process_dvc, number_sum, recv_message)
                 # Otherwise push it to the message/hold-back queue
                 else:
+                    print("This message did not satisfy the DVC causal deliverability condition. Will be enqueued.")
                     message_queue.append(recv_message)
 
                 # Check if any other messages can be delivered in the message/hold-back queue
@@ -212,7 +210,14 @@ def process_loop(event_list, process_events):
                     iproc, event_result[0].group(1), datetime.now().strftime("%H:%M:%S.%f"), 
                 ))
 
-                print(process_dvc)                          # Print out the current Process's DVC
+                # Generate and add a random floating-point number to this process's current stored number
+                r_float = generate_random_float()       # Generate a random floating-point number    
+                number_sum += r_float                   # Increment the number_sum with the received data
+
+                # Print the increment and new number sum
+                print("{0} (generated number) for internal event. Process {1}'s sum = {2}".format(
+                    str(r_float), iproc,  str(number_sum)
+                ))                
 
 def main():
     # Construct event list from second argument (file directory)
