@@ -11,6 +11,128 @@ import socket
 import uuid
 import sys
 import time
+from kivy.app import App
+from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.core.window import Window
+from kivy.uix.textinput import TextInput
+from kivy.uix.recycleview import RecycleView
+from kivy.lang import Builder
+from kivy.graphics import *
+from kivy.uix.label import Label
+from kivy.properties import ListProperty
+from kivy.uix.recycleboxlayout import RecycleBoxLayout
+
+Builder.load_string('''
+
+<AlignedLabel>:
+    halign: 'left'
+
+<TEST>:
+    viewclass: 'AlignedLabel'
+    bar_width: dp(5)
+    scroll_type: ["bars", "content"]
+    RecycleBoxLayout:
+        size_hint_y: None
+        height: self.minimum_height
+        orientation: 'vertical'
+        row_default_height: 60
+
+<MainScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: (1,1,1,1)
+            Rectangle:
+                size: self.size
+                pos: self.pos
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: (1, .1)
+            canvas.before:
+                Color: 
+                    rgba: (1,1,1,1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+        BoxLayout:
+            id: 'middle'
+            orientation: 'horizontal'
+            size_hint: (1, .75)
+            canvas.before:
+                Color:
+                    rgba: (0.3,0.3,0.3,1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            TEST
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: (1, .15)
+            canvas.before:
+                Color:
+                    rgba: (1,1,1,1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            TextInput:
+                text: ''
+                multiline: True
+                size_hint: (.8, 1)
+            Button:
+                text:'Send'
+                background_color: (0,0,1,1)
+                size_hint: (.2, 1)
+                on_release: root.testAdd
+''')
+
+
+class TEST(RecycleView):
+    def __init__(self, **kwargs):
+        super(TEST, self).__init__(**kwargs)
+        self.data = [{'text': str(x)} for x in range(5)]
+    def addMessage(self, msg):
+        self.data.append({'text': msg})
+
+
+
+#TODO - Do the text colouring in markup instead of in the .kv
+#e.g. Label(text='[color=ff3333]Hello[/color][color=3333ff]World[/color]'
+class AlignedLabel(Label):
+    def __init__(self, **kwargs):
+        super(AlignedLabel, self).__init__(**kwargs)
+
+class MainScreen(BoxLayout):
+        def nothing():
+            print('a')
+
+class GUI(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        TESTMessages = ['hello']
+        TESTErrors = ['errorabc']
+        TESTQueue = Queue()
+
+        def testGUI(TESTMessages):
+            while True:
+                time.sleep(1)
+                TESTObject = App.get_running_app().root.children[0].children[1].children[0]
+                TESTObject.addMessage(msg)
+        
+        inputThread = Thread(target=testGUI, args=(TESTMessages))
+        inputThread.start()
+
+    #might need to annotate this? Not sure
+    #@mainthread
+    def addMessage(self):
+        print('HELLO WORLD')
+        
+
+    def build(self):
+        return MainScreen()
 
 def silentFailureClose(connection):
     try:
@@ -266,6 +388,12 @@ def sayHello(peers):
         registerAndCompleteInitialisation()
 
 def main():
+    GUI().run()
+
+
+
+    #apparently logic like the below can be used to update GUI elements
+    #App.get_running_app().root.text='new text'
 
     #create shared resources
     #suprisingly, default python queue is thread-safe and blocks on .get()
