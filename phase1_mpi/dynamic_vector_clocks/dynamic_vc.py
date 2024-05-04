@@ -1,5 +1,5 @@
 from mpi4py import MPI
-import numpy as np
+from enum import IntEnum
 from datetime import datetime
 import random
 from time import sleep
@@ -12,6 +12,12 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
+class EventType(IntEnum):
+    UNICAST_EVENT = 0
+    BROADCAST_EVENT = 1
+    RECEIVE_EVENT = 2
+    INTERNAL_EVENT = 3
+
 # Messaging Functions
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))     # Send the defined message to the dest process with defined tag
@@ -22,16 +28,15 @@ def broadcast_message(message, event_tag, dest_processes):
         send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag
 
 def determine_recv_process(event_list, event_tag, event_type):
-    # If the event_type is a send (unicast)
-    if event_type == "send":
-        target_event = "r" + event_tag                              # The target_event is r<event_tag> 
-        for idx in range(0, len(event_list)):                       # For the index range in event_list
-            if target_event in event_list[idx]:                     # If the target_event is in the idx row of the event_list 
-                return [idx+1]                                      # Return the process ID of the row that the target_event is in
-    # If the event_ty[e is a broadcast
-    elif event_type == "broadcast":
-        dest_processes = [x for x in range(1, nproc) if x != iproc] # Define destination processes
-        return dest_processes                                       # Return the destination processes
+    match event_type:
+        case EventType.UNICAST_EVENT:
+            target_event = "r" + event_tag                              # The target_event is r<event_tag> 
+            for idx in range(0, len(event_list)):                       # For the index range in event_list
+                if target_event in event_list[idx]:                     # If the target_event is in the idx row of the event_list 
+                    return [idx+1]                                      # Return the process ID of the row that the target_event is in
+        case EventType.BROADCAST_EVENT:
+            dest_processes = [x for x in range(1, nproc) if x != iproc] # Define destination processes
+            return dest_processes                                       # Return the destination processes
 
 def generate_message(destinations, process_dvc):
     message_dvc = construct_message_dvc(process_dvc)                # Constuct the DVC for the message
@@ -148,6 +153,18 @@ def merge_dvcs(message_dvc, process_dvc):
                 row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(message row, process row)           
     return new_process_dvc                          # Return new_process_dvc 
 
+def determine_and_extract_event(event):
+    if re.match("^r([1-9].*)", event):
+        return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
+    elif re.match("^s([1-9].*)", event):
+        return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
+    elif re.match("^b([1-9].*)", event):
+        return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
+    elif re.match("^([a-zA-Z].*)", event):
+        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
+    else: # Assume its an internal event
+        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
+
 # Process Loop / main
 def process_loop(event_list, process_events):
     # Process n's initial dynamic VC
@@ -161,79 +178,74 @@ def process_loop(event_list, process_events):
 
     for idx, event in enumerate(process_events):
         print("-----------------------\nEvent #{0} -> {1}: ({2})\n-----------------------".format(idx, event, number_sum))
+        event_result = determine_and_extract_event(event)
+        match event_result[1]:
+            case EventType.RECEIVE_EVENT:
+                recv_message = None             # Set the initial recv_message to None
+                event_tag = event_result[0].group(1)    # Parse the event_tag from the first group in recv_op
 
-        recv_op = re.search("^r([1-9].*)", event)               # If the event was a receive
-        send_op = re.search("^s([1-9].*)", event)               # If the event was a send
-        bcast_op = re.search("^b([1-9].*)", event)              # If the event was a broadcast
-        internal_op = re.search("^([a-zA-Z].*)", event)         # If the event was internal
+                # Probe for messages, and obtain message from channel should one be sent
+                while True:
+                    s = MPI.Status()                            # Obtain the MPI Status
+                    comm.Probe(tag=int(event_tag), status=s)    # Probe for messages with the deemed event_tag
+                    if str(s.tag) == event_tag:                 # If a message in channel matches the event_tag
+                        recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))     # Receive the message
+                        break                                   # Break from message probing
+                
+                # Print of message retrieval from the channel
+                print("Process {0} received number {1} from Process {2} @ {3}".format(
+                    iproc, str(recv_message["number"]), str(recv_message["sender"]), datetime.now().strftime("%H:%M:%S.%f")
+                ))
 
-        if recv_op:                         # If the event was a receive
-            recv_message = None             # Set the initial recv_message to None
-            event_tag = recv_op.group(1)    # Parse the event_tag from the first group in recv_op
+                # If the message can be delivered now - deliver it.
+                if can_deliver_message(process_dvc, recv_message):
+                    process_dvc, number_sum = deliver_message(process_dvc, number_sum, recv_message)
+                # Otherwise push it to the message/hold-back queue
+                else:
+                    message_queue.append(recv_message)
 
-           # Probe for messages, and obtain message from channel should one be sent
-            while True:
-                s = MPI.Status()                            # Obtain the MPI Status
-                comm.Probe(tag=int(event_tag), status=s)    # Probe for messages with the deemed event_tag
-                if str(s.tag) == event_tag:                 # If a message in channel matches the event_tag
-                    recv_message = comm.recv(source=MPI.ANY_SOURCE, tag=int(event_tag))     # Receive the message
-                    break                                   # Break from message probing
+                # Check if any other messages can be delivered in the message/hold-back queue
+                process_dvc, number_sum = check_message_queue(process_dvc, number_sum, message_queue, recv_message)
+
+                # Print the current DVC after this event/potential deliveries and the current number sum
+                print("DVC after {0}:\t{1}".format(event, process_dvc))
+                print("Number Sum:\t", number_sum)
+                
+            case EventType.BROADCAST_EVENT:
+                event_tag = event_result[0].group(1)                                                       # Parse the event_tag from the first group in bcast_op
+                destination_processes = determine_recv_process(event_list, event_tag, EventType.BROADCAST_EVENT)  # Determine the receiving process(es) for this broadcast message
+                print("Broadcast message to process(es) {0}".format(destination_processes))         # Printing of upcoming broadcast message sending
+                message = generate_message(destination_processes, process_dvc)                      # Generate the message (message DVC and floating-point number)
+
+                # Print of imminent message broadcast to the destination process(es)
+                print("Process {0} broadcasting message to Process(es) {1} @ {2}".format(
+                    iproc, destination_processes, datetime.now().strftime("%H:%M:%S.%f"), 
+                ))
             
-            # Print of message retrieval from the channel
-            print("Process {0} received number {1} from Process {2} @ {3}".format(
-                iproc, str(recv_message["number"]), str(recv_message["sender"]), datetime.now().strftime("%H:%M:%S.%f")
-            ))
+                # Broadcast the message(with generated floating point number and DVC) to the destination process(es)
+                broadcast_message(message, event_tag, destination_processes)
 
-            # If the message can be delivered now - deliver it.
-            if can_deliver_message(process_dvc, recv_message):
-                process_dvc, number_sum = deliver_message(process_dvc, number_sum, recv_message)
-            # Otherwise push it to the message/hold-back queue
-            else:
-                message_queue.append(recv_message)
+            case EventType.UNICAST_EVENT:
+                event_tag = event_result[0].group(1)                                                    # Parse the event_tag from the first group in send_op
+                destination_process = determine_recv_process(event_list, event_tag, EventType.UNICAST_EVENT)     # Determine the receiving process for this message
+                print("Unicast message to process {0}".format(destination_process))             # Printing of upcoming message sending
+                message = generate_message(destination_process, process_dvc)                    # Generate the message (message DVC and floating-point number)
+                
+                # Print of imminent message sending to the destination process
+                print("Process {0} sending unicast message to Process {1} @ {2}".format(
+                    iproc, destination_process[0], datetime.now().strftime("%H:%M:%S.%f"), 
+                ))
 
-            # Check if any other messages can be delivered in the message/hold-back queue
-            process_dvc, number_sum = check_message_queue(process_dvc, number_sum, message_queue, recv_message)
+                # Send the message(with generated floating point number and DVC) to the destination process
+                send_message(message, destination_process[0], event_tag)
+            case EventType.INTERNAL_EVENT:
+                # Print of internal event occuring at the process
+                print("Process {0} internal event {1} @ {2}".format(
+                    iproc, event_result[0].group(1), datetime.now().strftime("%H:%M:%S.%f"), 
+                ))
 
-            # Print the current DVC after this event/potential deliveries and the current number sum
-            print("DVC after {0}:\t{1}".format(event, process_dvc))
-            print("Number Sum:\t", number_sum)
-  
-        elif send_op:                                                                       # If the event was a send
-            event_tag = send_op.group(1)                                                    # Parse the event_tag from the first group in send_op
-            destination_process = determine_recv_process(event_list, event_tag, "send")     # Determine the receiving process for this message
-            print("Unicast message to process {0}".format(destination_process))             # Printing of upcoming message sending
-            message = generate_message(destination_process, process_dvc)                    # Generate the message (message DVC and floating-point number)
-            
-            # Print of imminent message sending to the destination process
-            print("Process {0} sending unicast message to Process {1} @ {2}".format(
-                iproc, destination_process[0], datetime.now().strftime("%H:%M:%S.%f"), 
-            ))
-
-             # Send the message(with generated floating point number and DVC) to the destination process
-            send_message(message, destination_process[0], event_tag)
-
-        elif bcast_op:                                                                          # If the event was a broadcast
-            event_tag = bcast_op.group(1)                                                       # Parse the event_tag from the first group in bcast_op
-            destination_processes = determine_recv_process(event_list, event_tag, "broadcast")  # Determine the receiving process(es) for this broadcast message
-            print("Broadcast message to process(es) {0}".format(destination_processes))         # Printing of upcoming broadcast message sending
-            message = generate_message(destination_processes, process_dvc)                      # Generate the message (message DVC and floating-point number)
-
-            # Print of imminent message broadcast to the destination process(es)
-            print("Process {0} broadcasting message to Process(es) {1} @ {2}".format(
-                iproc, destination_processes, datetime.now().strftime("%H:%M:%S.%f"), 
-            ))
-           
-            # Broadcast the message(with generated floating point number and DVC) to the destination process(es)
-            broadcast_message(message, event_tag, destination_processes)
-            
-        elif internal_op:           # If the event was internal
-            # Print of internal event occuring at the process
-            print("Process {0} internal event {1} @ {2}".format(
-                iproc, internal_op.group(1), datetime.now().strftime("%H:%M:%S.%f"), 
-            ))
-
-            process_dvc = increment_dvc(process_dvc)    # Increment the DVC (process's internal event) 
-            print(process_dvc)                          # Print out the current Process's DVC
+                process_dvc = increment_dvc(process_dvc)    # Increment the DVC (process's internal event) 
+                print(process_dvc)                          # Print out the current Process's DVC
 
 def event_list_from_file(file_loc):
     event_list = []                         # Construct an event_list array
