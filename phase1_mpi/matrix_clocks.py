@@ -3,11 +3,9 @@ from enum import IntEnum
 from datetime import datetime
 from time import sleep
 from shared.events import EventType, determine_and_extract_event
-from shared.message import determine_recv_process
+from shared.message import determine_recv_process, generate_random_float, send_message, broadcast_message
 import numpy as np
-import random
 import sys
-import re
 
 # MPI World Setup
 comm = MPI.COMM_WORLD
@@ -15,14 +13,6 @@ iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
 # Messaging Functions
-def send_message(message, dest, tag):
-    comm.send(message, dest=dest, tag=int(tag))     # Send the defined message to the dest process with defined tag
-
-def broadcast_message(message, event_tag, dest_processes):
-    # Send the message to all destination processes
-    for idx in dest_processes:
-        send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag                                # Return the destination processes
-    
 def generate_message(destinations, process_matrix):
     matrix_message = construct_message_matrix_clock(destinations, process_matrix)       # Constuct the matrix clock for the message
     r_float = generate_random_float()                               # Generate a random floating-point number 
@@ -34,14 +24,11 @@ def generate_message(destinations, process_matrix):
     }
     # Printing message generation
     print("Process {0} generated message with heading for Process(es) {1}.\nNumber: {2}.\nMC: ".format(
-        iproc, destinations,r_float
+        iproc, destinations, r_float
     ))
     print(matrix_message)
     # Returning the message
     return message
-
-def generate_random_float():
-    return round(random.uniform(0, 10), 3)                          # Generation of a random floating-point number (0-10), 3 decimal places
 
 # Deliverability Functions
 def can_deliver_message(current_matrix, message):
@@ -201,7 +188,7 @@ def process_loop(event_list, process_events):
                 ))
 
                 # Broadcast the message(with generated floating point number and matrix clock) to the destination process(es)
-                broadcast_message(message, event_tag, destination_processes)
+                broadcast_message(comm, message, event_tag, destination_processes)
 
             # If the event is a send/unicast event
             case EventType.UNICAST_EVENT:
@@ -216,7 +203,7 @@ def process_loop(event_list, process_events):
                 ))
 
                 # Send the message(with generated floating point number and matrix clock) to the destination process
-                send_message(message, destination_process[0], event_tag)
+                send_message(comm, message, destination_process[0], event_tag)
 
             # If the event is an internal process event
             case EventType.INTERNAL_EVENT:
