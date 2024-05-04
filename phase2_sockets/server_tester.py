@@ -7,19 +7,19 @@ from threading import Thread
 import time
 import uuid
 from shared.client_message import messageToJson, parseJsonMessage
-from shared.server_message import ServerMessageType, constructBasicMessage
+from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.network import sendWithHeaderAndEncoding
 
 def buildRandomMessage():
     match randint(0, 3):
         case 0:
-            return constructBasicMessage(ServerMessageType.GET_PEERS)
+            return constructBasicMessage(RegistryMessageType.GET_PEERS)
         case 1:
-            return constructBasicMessage(ServerMessageType.REGISTER_PEER)
+            return constructBasicMessage(RegistryMessageType.REGISTER_PEER)
         case 2:
-            return constructBasicMessage(ServerMessageType.DEREGISTER_PEER)
+            return constructBasicMessage(RegistryMessageType.DEREGISTER_PEER)
         case 3:
-            return constructBasicMessage(ServerMessageType.OK) #unexpected message type, server should reply with OK
+            return constructBasicMessage(RegistryMessageType.OK) #unexpected message type, server should reply with OK
 
 def testThread(useSameMessageClock):
     env = dotenv_values('.env')
@@ -30,7 +30,7 @@ def testThread(useSameMessageClock):
         message = messageToJson(buildRandomMessage())
         print('Attempt to send message: ', message)
         targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        targetSocket.connect((ip, int(env['PROTOCOL_PORT_SERVER'])))
+        targetSocket.connect((ip, int(env['REGISTRY_PROTOCOL_PORT'])))
         sendWithHeaderAndEncoding(targetSocket, message)
         readMessage = targetSocket.recv(1024)
         print(parseJsonMessage(readMessage, ['type', 'id']))

@@ -26,7 +26,7 @@ def readSingleMessage(connection):
     contentLength = None
     received = b''
     while True:
-        data = connection.recv(4000)
+        data = connection.recv(2048)
 
         #return early if socket closed early
         if not data:

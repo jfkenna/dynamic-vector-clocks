@@ -4,6 +4,7 @@ from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
 from shared.validator import validateEnv
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
+from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 from shared.network import sendWithHeaderAndEncoding, readSingleMessage
 import socket
@@ -80,22 +81,27 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
             if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
                 emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
 
+
+                senderSocket = buildSenderSocket()
                 #don't initialise if peer couldn't receive message
-                if sendToSingleAdr(emptyHelloResponse, requestingPeer):
+                if sendToSingleAdr(emptyHelloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT'])):
                     print('Failed to send clone data to peer. Remaining unitialised')
                     continue
+                silentFailureClose(senderSocket)
                 
                 #initialise after sending peer data
                 peers.append(requestingPeer) #TODO see comment below on need for lock on peers - very important to address
                 handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
-                initialisationComplete.set()
+                registerAndCompleteInitialisation()
                 continue
 
             #TODO need to lock on vector clock and message queue here
             #i think i'll just make a monitor class to simplify all these locks
             #for now, don't even lock, just so basic functionality is present
             helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
-            sendToSingleAdr(helloResponse, requestingPeer)
+            senderSocket = buildSenderSocket()
+            sendToSingleAdr(helloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT']))
+            silentFailureClose(senderSocket)
 
             #TODO I think a lock is required for the case where we are iterating over peers at the same time
             #the new peer is added - we might not send one of the messages to the new peer, causing dropped messages
@@ -121,7 +127,7 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
                 clonedMessages = clonedMessages + preInitialisedReceivedMessages
                 processMessageQueue = clonedMessages
                 handleMessageQueue(processVectorClock, processMessageQueue, None)
-                initialisationComplete.set()
+                registerAndCompleteInitialisation()
             continue
 
         #handle standard messages
@@ -129,7 +135,7 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
 
 
 def UIWorker(outgoingMessageQueue):
-    print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n=======CHAT STARTED=======')
+    print('===CHAT STARTED=======')
     while True:
         newMessageText = input()
         outgoingMessageQueue.put(newMessageText)
@@ -175,22 +181,38 @@ def handleMessage(message, receivedMessages, peers):
         processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
 
 
-def sendToSingleAdr(message, adr):
-    targetSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    targetSocket.bind((env['CLIENT_LISTEN_IP'], 0)) #bind to specific sender adr so we can be added to peer list. Port doesn't matter
-    targetSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
+def registerAndCompleteInitialisation():
+    if int(env['ENABLE_PEER_SERVER']) == 1:
+        try:
+            serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
+        except:
+            print('Registration failed due to issues resolving the registry server hostname')
+            print('Your peers will need to add you manually.')
+
+        registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
+        senderSocket = buildSenderSocket()
+        if sendToSingleAdr(registerMessage, senderSocket, serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])):
+            print('Failed to register with registry server. Your peers will need to add you manually.')
+    initialisationComplete.set()
+
+
+def buildSenderSocket():
+    senderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    senderSocket.bind((env['CLIENT_LISTEN_IP'], 0)) #bind to specific sender adr so we can receive replies
+    senderSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
+    return senderSocket
+
+def sendToSingleAdr(message, senderSocket, adr, port):
     try:
-        targetSocket.connect((adr, int(env['PROTOCOL_PORT'])))
+        senderSocket.connect((adr, port))
     except socket.error:
-        print('Error connecting to peer: {0}'.format(socket.error))
+        print('Error connecting to adr: {0}'.format(socket.error))
         return True
     try:
-        sendWithHeaderAndEncoding(targetSocket, message)
+        sendWithHeaderAndEncoding(senderSocket, message)
     except socket.error:
         print('Error sending message to peer: {0}'.format(socket.error))
-        silentFailureClose(targetSocket)
         return True
-    silentFailureClose(targetSocket)
     return False
 
 
@@ -199,14 +221,18 @@ def broadcastToPeers(message, peers):
     for peer in peers:
         #print("Broadcasting to peer {0}".format(peer))
         #print("trying with peer {0}".format(peer))
-        if sendToSingleAdr(message, peer):
+        senderSocket = buildSenderSocket()
+        if sendToSingleAdr(message, senderSocket, peer, int(env['PROTOCOL_PORT'])):
             failedCount += 1
+        silentFailureClose(senderSocket)
         #print('broadcast {0} to {1}'.format(message, peer))
     
     if (failedCount == len(peers)):
         #TODO decide on error handling here
         #maybe try to get a new set of peers from the server, and if that also fails, close completely?
         print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
+        return True
+    return False
 
 
 
@@ -233,7 +259,11 @@ def getPeerHosts():
 
 def sayHello(peers):
     helloMessage = messageToJson(constructHello(processId))
-    broadcastToPeers(helloMessage, peers)
+    if broadcastToPeers(helloMessage, peers):
+        #TODO also need logic to handle the case where peer receives request but never replies
+        #could be handled with a timer. But to be honest, this server logic is growing really complex
+        print('Failed to send HELLO message to any of our peers. Registering and starting with an empty clock')
+        registerAndCompleteInitialisation()
 
 def main():
 
@@ -250,10 +280,54 @@ def main():
     preInitialisedReceivedMessages = []
 
     #TODO consider adding new peers at runtime based on received messages, so network is more fault tolerant
+    #it's very brittle right now - if you add a single peer that only knows one other peer, it's a network partition waiting to happen
     #this is an extension, so for our first implementation just start with a fixed set of peers that we can multicast to
-    peers = getPeerHosts()
-    if len(peers) == 0:
-        initiallyUnconnected.set()
+
+
+    #get peers from peer server or command line based on params
+    if int(env['ENABLE_PEER_SERVER']) == 1:
+        try:
+            serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
+        except:
+            print('Failed to resolve registry server hostname')
+            print('exiting...')
+            exit()
+
+        print('Retrieving peers from registry server...')
+        getPeerMessage = messageToJson(constructBasicMessage(RegistryMessageType.GET_PEERS))
+        senderSocket = buildSenderSocket()
+        if sendToSingleAdr(getPeerMessage, senderSocket, serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])):
+            print('Failed to get peers from registry server')
+            print('exiting...')
+            exit()
+
+        try:
+            peerResponse = readSingleMessage(senderSocket)
+            if peerResponse == None:
+                print('Failed to get peer from registry server')
+                print('exiting...')
+                exit()
+        except socket.error:
+            print('Failed to get peer from registry server')
+            print('exiting...')
+            exit()
+
+        silentFailureClose(senderSocket)
+        
+        peerData = parseJsonMessage(peerResponse, ['peers', 'type'])
+        if peerData == None or peerData['type'] != RegistryMessageType.PEER_RESPONSE:
+            print('Registry responded with an invalid message')
+            print('exiting...')
+            exit()
+        peers = peerData['peers']
+        print('Received peers from registry: ', peers)
+        if (len(peers) == 0):
+            print('Registry had no peers, registering self')
+            registerAndCompleteInitialisation()
+    else:
+        peers = getPeerHosts()
+        if len(peers) == 0:
+            initiallyUnconnected.set()
     
     #setup listener
     #for now, only use ipv4 - can swap to V6 fairly easily later if we want to
@@ -300,16 +374,24 @@ def main():
 #handle .env as global variable
 #parse and validate, then call main()
 env = dotenv_values('.env')
+if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'REGISTRY_PROTOCOL_PORT', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
+    print('.env failed validation, exiting...')
+    exit()
 
 if len(sys.argv) < 2:
     print("You must provide the client's ip, exiting...")
     exit()
 env['CLIENT_LISTEN_IP'] = sys.argv[1]
 
-print('Combined env and argv config:', dict(env))
-if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'PROTOCOL_PORT_SERVER', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
-    print('.env failed validation, exiting...')
+if int(env['ENABLE_PEER_SERVER']) == 1 and len(sys.argv) < 3:
+    print("ENABLE_PEER_SERVER flag was set, but you did not provide the ip of a peer registry")
+    print("exiting...")
     exit()
+
+if (int(env['ENABLE_PEER_SERVER']) == 1):
+    env['PEER_REGISTRY_IP'] = sys.argv[2]
+
+print('Combined env and argv config:', dict(env))
 
 #global lock for received message dict
 messageLock = Lock()

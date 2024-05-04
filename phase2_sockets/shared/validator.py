@@ -9,6 +9,6 @@ def validateEnv(env, requiredFields):
         print("PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.".format(env['PROTOCOL_PORT']))
         return False
     
-    if 'PROTOCOL_PORT_SERVER' in env and (not 1 <= int(env['PROTOCOL_PORT_SERVER']) <= 65535):
-        print("PROTOCOL_PORT_SERVER is defined as {0}. Needs to be between 1-65535.".format(env['PROTOCOL_PORT']))
+    if 'REGISTRY_PROTOCOL_PORT' in env and (not 1 <= int(env['REGISTRY_PROTOCOL_PORT']) <= 65535):
+        print("REGISTRY_PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.".format(env['REGISTRY_PROTOCOL_PORT']))
     return True

@@ -1,7 +1,7 @@
 from enum import IntEnum
 import uuid
 
-class ServerMessageType(IntEnum):
+class RegistryMessageType(IntEnum):
     GET_PEERS = 0
     REGISTER_PEER = 1
     DEREGISTER_PEER = 2
@@ -20,6 +20,6 @@ def constructPeerResponseMessage(peers):
     messageId = str(uuid.uuid4())
     return {
         'id': messageId,
-        'type': ServerMessageType.PEER_RESPONSE,
+        'type': RegistryMessageType.PEER_RESPONSE,
         'peers': peers or []
     }

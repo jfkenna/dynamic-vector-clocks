@@ -5,9 +5,9 @@ from threading import Thread, Lock
 from queue import Queue
 from dotenv import dotenv_values
 from shared.validator import validateEnv
-from shared.server_message import ServerMessageType, constructBasicMessage, constructPeerResponseMessage
+from shared.server_message import RegistryMessageType, constructBasicMessage, constructPeerResponseMessage
 from shared.client_message import parseJsonMessage, messageToJson
-from shared.network import sendWithHeaderAndEncoding
+from shared.network import sendWithHeaderAndEncoding, readSingleMessage
 
 def silentFailureClose(connection):
     try:
@@ -20,31 +20,29 @@ def acceptWorker(connectionQueue, serverSocket):
         connectionQueue.put(serverSocket.accept())
 
 def handleMessage(message, connection, peers):
-    #python switch automatically inserts break after each case
-    #so control flow here is OK
     match message['type']:
-        case ServerMessageType.GET_PEERS:
+        case RegistryMessageType.GET_PEERS:
             with lock:
                 response = messageToJson(constructPeerResponseMessage(list(peers.keys())))
             sendWithHeaderAndEncoding(connection, response)
 
-        case ServerMessageType.REGISTER_PEER:
+        case RegistryMessageType.REGISTER_PEER:
             peerKey = connection.getpeername()[0]
             with lock:
                 peers[peerKey] = True
-            response = messageToJson(constructBasicMessage(ServerMessageType.OK))
+            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
             sendWithHeaderAndEncoding(connection, response)
 
-        case ServerMessageType.DEREGISTER_PEER:
+        case RegistryMessageType.DEREGISTER_PEER:
             peerKey = connection.getpeername()[0]
             with lock:
                 if peerKey in peers:
                     del peers[peerKey]
-            response = messageToJson(constructBasicMessage(ServerMessageType.OK))
+            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
             sendWithHeaderAndEncoding(connection, response)
 
         case _:
-            response = messageToJson(constructBasicMessage(ServerMessageType.BAD_MESSAGE))
+            response = messageToJson(constructBasicMessage(RegistryMessageType.BAD_MESSAGE))
             sendWithHeaderAndEncoding(connection, response)
     print('After operation {0}'.format(peers))
     return
@@ -52,10 +50,8 @@ def handleMessage(message, connection, peers):
 def worker(connectionQueue, peers):
     while True:
         connection, adr = connectionQueue.get()
-        #TODO properly read until seperator is reached
-        #for now, just assume total message size will be < 1024
         try:
-            data = connection.recv(1024)
+            data = readSingleMessage(connection)
         except socket.error:
             print('Error reading incoming message')
             silentFailureClose(connection)
@@ -63,7 +59,7 @@ def worker(connectionQueue, peers):
 
         parsedMessage = parseJsonMessage(data, ['id', 'type'])
         if parsedMessage == None:
-            response = messageToJson(constructBasicMessage(ServerMessageType.BAD_MESSAGE))
+            response = messageToJson(constructBasicMessage(RegistryMessageType.BAD_MESSAGE))
             silentFailureClose(connection)
             continue
 
@@ -71,7 +67,6 @@ def worker(connectionQueue, peers):
             handleMessage(parsedMessage, connection, peers)
         except socket.error:
             print('Error handling message: {0}'.format(socket.error))
-        
         silentFailureClose(connection)
         continue
 
@@ -83,9 +78,9 @@ def main():
     
     #initial setup copied from client
     acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    acceptSocket.bind((ip, int(env['PROTOCOL_PORT_SERVER'])))
+    acceptSocket.bind((ip, int(env['REGISTRY_PROTOCOL_PORT'])))
     acceptSocket.listen()
-    print('Server listening at {0} on port {1}'.format(ip, env['PROTOCOL_PORT_SERVER']))
+    print('Server listening at {0} on port {1}'.format(ip, env['REGISTRY_PROTOCOL_PORT']))
     acceptThread = Thread(target=acceptWorker, args=(connectionQueue, acceptSocket, ))
     acceptThread.start()
     workerThread = Thread(target=worker, args=(connectionQueue, peers))
@@ -93,13 +88,12 @@ def main():
     acceptThread.join()
     workerThread.join()
 
-
 if len(sys.argv) < 2:
     print("You must provide the server ip, exiting...")
     exit()
 
 env = dotenv_values('.env')
-if validateEnv(env, ['PROTOCOL_PORT_SERVER']) == None:
+if validateEnv(env, ['REGISTRY_PROTOCOL_PORT']) == None:
     exit()
 ip = sys.argv[1]
 lock = Lock()
