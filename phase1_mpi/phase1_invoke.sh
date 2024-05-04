@@ -1,27 +1,33 @@
 #! /bin/bash
 
 # Obtain number of processes from file
-VALIDOPS=":f"
+ALGORITHM=""
+FILE_NAME=""
 
 function invoke_mpi() {
-    file_name=$1
-    file_lines=$(cat $file_name | wc -l)
-    procs=$(($file_lines+2))
+    FILE_LINES=$(cat $FILE_NAME | wc -l)
+    N_PROCS=$(($FILE_LINES+2))
 
-    mpiexec -n $procs python3 matrix-clocks.py $file_name
+    if [[ $ALGORITHM == "dvc" ]]; then
+      mpiexec -n $N_PROCS python3 dynamic_vector_clocks.py $FILE_NAME
+    elif [[ $ALGORITHM == "matrix" ]]; then
+      mpiexec -n $N_PROCS python3 matrix_clocks.py $FILE_NAME
+    fi
 }
 
-while getopts ${VALIDOPS} option; do
+while getopts ":f:file:a:alg:" option; do
   case ${option} in
-    f)
-      invoke_mpi $2
-      ;;
+    f) FILE_NAME=$2 ;;
+    a) ALGORITHM=$4 ;;
     ?)
-      echo "You passed an invalid option. Valid options are -f <filename>"
+      echo "You passed an invalid option. Valid options are -f <filename> (or -file <filename>) -a <dvc|matrix> (or -alg <dvc|matrix>)"
       exit 1
       ;;
   esac
 done
+
+# Run MPI with options
+invoke_mpi $FILE_NAME $ALGORITHM
 
 # References
 # [1] Jurudocs. "Format a datetime into a string with milliseconds". Stack Overflow. https://stackoverflow.com/questions/7588511/format-a-datetime-into-a-string-with-milliseconds (accessed Mar. 13, 2024).
@@ -50,3 +56,4 @@ done
 # [24] W3Schools. "Python Remove Array Item". W3Schools. https://www.w3schools.com/python/gloss_python_array_remove.asp (accessed Apr. 2, 2024).
 # [25] nobody. "Python regular expressions return true/false". https://stackoverflow.com/questions/6576962/python-regular-expressions-return-true-false (accessed May. 6, 2024).
 # [26] A. Jalli. "Python Switch Case -- Comprehensive Guide". https://medium.com/@artturi-jalli/python-switch-case-9cd0014759e4 (accessed May. 4, 2024).
+# https://stackoverflow.com/questions/67428689/how-to-pass-multiple-flag-and-multiple-arguments-in-getopts-in-shell-script

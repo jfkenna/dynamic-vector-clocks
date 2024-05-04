@@ -5,9 +5,8 @@ import random
 from time import sleep
 import sys
 import re
-import uuid
 
-# MPI World Setup (Lafayette 2021) (Dalcin 2020).
+# MPI World Setup 
 comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
