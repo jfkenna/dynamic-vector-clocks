@@ -1,63 +1,19 @@
 from mpi4py import MPI
 from enum import IntEnum
-import numpy as np
 from datetime import datetime
-import random
 from time import sleep
+from shared.events import EventType, determine_and_extract_event
+from shared.message import determine_recv_process, generate_random_float, send_message, broadcast_message
+from shared.setup import event_list_from_file
+import numpy as np
 import sys
-import re
-import uuid
 
-# MPI World Setup (Lafayette 2021) (Dalcin 2020).
+# MPI World Setup
 comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
-# Event Functions / Classes
-class EventType(IntEnum):
-    UNICAST_EVENT = 0
-    BROADCAST_EVENT = 1
-    RECEIVE_EVENT = 2
-    INTERNAL_EVENT = 3
-
-def determine_and_extract_event(event):
-    # If the event is a receive event
-    if re.match("^r([1-9].*)", event):      
-        return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
-    # If the event is a send/unicast event
-    elif re.match("^s([1-9].*)", event):
-        return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
-    # If the event is a broadcast event
-    elif re.match("^b([1-9].*)", event):
-        return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
-    # If the event is an internal process event
-    elif re.match("^([a-zA-Z].*)", event):
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-    # Othwerwise - based on some combination not recognized - assume its an internal process event
-    else: 
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-
 # Messaging Functions
-def send_message(message, dest, tag):
-    comm.send(message, dest=dest, tag=int(tag))     # Send the defined message to the dest process with defined tag
-
-def broadcast_message(message, event_tag, dest_processes):
-    # Send the message to all destination processes
-    for idx in dest_processes:
-        send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag
-
-def determine_recv_process(event_list, event_tag, event_type):
-    # If the event_type is a send (unicast)
-    match event_type:
-        case EventType.UNICAST_EVENT:
-            target_event = "r" + event_tag                              # The target_event is r<event_tag> 
-            for idx in range(0, len(event_list)):                       # For the index range in event_list
-                if target_event in event_list[idx]:                     # If the target_event is in the idx row of the event_list 
-                    return [idx+1]                                      # Return the process ID of the row that the target_event is in
-        case EventType.BROADCAST_EVENT:
-            dest_processes = [x for x in range(1, nproc) if x != iproc] # Define destination processes
-            return dest_processes                                       # Return the destination processes
-    
 def generate_message(destinations, process_matrix):
     matrix_message = construct_message_matrix_clock(destinations, process_matrix)       # Constuct the matrix clock for the message
     r_float = generate_random_float()                               # Generate a random floating-point number 
@@ -69,14 +25,11 @@ def generate_message(destinations, process_matrix):
     }
     # Printing message generation
     print("Process {0} generated message with heading for Process(es) {1}.\nNumber: {2}.\nMC: ".format(
-        iproc, destinations,r_float
+        iproc, destinations, r_float
     ))
     print(matrix_message)
     # Returning the message
     return message
-
-def generate_random_float():
-    return round(random.uniform(0, 10), 3)                          # Generation of a random floating-point number (0-10), 3 decimal places
 
 # Deliverability Functions
 def can_deliver_message(current_matrix, message):
@@ -226,7 +179,7 @@ def process_loop(event_list, process_events):
             # If the event is a broadcast event
             case EventType.BROADCAST_EVENT:
                 event_tag = event_result[0].group(1)                                                                # Parse the event_tag from the first group in event_result[0]
-                destination_processes = determine_recv_process(event_list, event_tag, EventType.BROADCAST_EVENT)    # Determine the receiving process(es) for this broadcast message
+                destination_processes = determine_recv_process(iproc, nproc, event_list, event_tag, EventType.BROADCAST_EVENT)    # Determine the receiving process(es) for this broadcast message
                 print("Broadcast message to Process(es) {0}".format(destination_processes))                         # Printing of upcoming broadcast message sending
                 message = generate_message(destination_processes, process_matrix)                                   # Generate the message (message matrix clock and floating-point number)
 
@@ -236,12 +189,12 @@ def process_loop(event_list, process_events):
                 ))
 
                 # Broadcast the message(with generated floating point number and matrix clock) to the destination process(es)
-                broadcast_message(message, event_tag, destination_processes)
+                broadcast_message(comm, message, event_tag, destination_processes)
 
             # If the event is a send/unicast event
             case EventType.UNICAST_EVENT:
                 event_tag = event_result[0].group(1)                                                            # Parse the event_tag from the first group in event_result[0]
-                destination_process = determine_recv_process(event_list, event_tag, EventType.UNICAST_EVENT)    # Determine the receiving process for this message
+                destination_process = determine_recv_process(iproc, nproc, event_list, event_tag, EventType.UNICAST_EVENT)    # Determine the receiving process for this message
                 print("Unicast message to process {0}".format(destination_process))                             # Printing of upcoming message sending
                 message = generate_message(destination_process, process_matrix)                                 # Generate the message (message matrix-clock and floating-point number)
 
@@ -251,7 +204,7 @@ def process_loop(event_list, process_events):
                 ))
 
                 # Send the message(with generated floating point number and matrix clock) to the destination process
-                send_message(message, destination_process[0], event_tag)
+                send_message(comm, message, destination_process[0], event_tag)
 
             # If the event is an internal process event
             case EventType.INTERNAL_EVENT:
@@ -267,14 +220,6 @@ def process_loop(event_list, process_events):
                 print("After addition (internal event), Process {0} has number sum {1}".format(
                     iproc, str(number_sum)
                 ))
-
-def event_list_from_file(file_loc):
-    event_list = []                         # Construct an event_list array
-    file = open(file_loc)                   # Open the file determined by sys.argv[1]
-    lines = file.readlines()                # Read the lines of the file
-    for line in lines:                      # For each line that has been read
-        event_list.append(line.strip())     # Append the line to the event_list
-    return event_list                       # Return event_list
 
 def main():
     # Construct event list from second argument (file directory)
@@ -321,6 +266,7 @@ References
 [22] note.nkmk.me. "How to return multiple values from a function in Python". note.nkmk.me. https://note.nkmk.me/en/python-function-return-multiple-values/ (accessed Apr. 2, 2024).
 [23] A. Luiz. "How do you extract a column from a multi-dimensional array?". Stack Overflow. https://stackoverflow.com/questions/903853/how-do-you-extract-a-column-from-a-multi-dimensional-array (accessed Apr. 2, 2024).
 [24] W3Schools. "Python Remove Array Item". W3Schools. https://www.w3schools.com/python/gloss_python_array_remove.asp (accessed Apr. 2, 2024).
-[25] nobody. "Python regular expressions return true/false". https://stackoverflow.com/questions/6576962/python-regular-expressions-return-true-false (accessed May. 6, 2024).
-[26] A. Jalli. "Python Switch Case -- Comprehensive Guide". https://medium.com/@artturi-jalli/python-switch-case-9cd0014759e4 (accessed May. 4, 2024).
+[25] nobody. "Python regular expressions return true/false". Stack Overflow. https://stackoverflow.com/questions/6576962/python-regular-expressions-return-true-false (accessed May. 6, 2024).
+[26] A. Jalli. "Python Switch Case -- Comprehensive Guide". Medium. https://medium.com/@artturi-jalli/python-switch-case-9cd0014759e4 (accessed May. 4, 2024).
+[27] Linuxize. "Bash if..else Statement". Linuxize. https://stackoverflow.com/questions/67428689/how-to-pass-multiple-flag-and-multiple-arguments-in-getopts-in-shell-script (accessed May. 4, 2024).
 '''

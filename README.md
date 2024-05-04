@@ -12,9 +12,9 @@ The repository consists of two main directories - `phase1_mpi` and `phase2_socke
 
 The first phase of this project is implementing the Dynamic Vector Clock Algorithm using **Message Passing Interface** - or MPI for short. 
 
-This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock (`/dynamic_vector_clocks` directory and Matrix Clock (`/matrix_clock` directory) implementations have been developed in this phase - the logic for checking for causal delivery in each slightly different, but applied in a similar way.
+This is achieved around the _known_ input of a distributed system's processes's and events; where said events are sent and received between these processes. Both Dynamic Vector Clock (`dynamic_vector_clocks.py`) and Matrix Clock (`/matrix_clock.py`) implementations have been developed in this phase - the logic for checking for causal delivery in each slightly different, but applied in a similar way; shared functionality exists in the `/shared` directory.
 
-Example input files live in each corresponding implementations' directories listed above within an `/examples` directory. Unicast/broadcast examples are inclusive for both - and are line-by-line seperated with the events that happen at each process. For example, the below file denotes a 3 process system where:
+Example input files live in this phases' `/examples` directory - this containing subdirectories for each `/dynamic_vector_clocks` and `/matrix_clocks` with specific examples. Unicast/broadcast examples are inclusive for both - and are line-by-line seperated with the events that happen at each process. For example, the below file denotes a 3 process system where:
 - Process 1 **broadcasts** message 1, and **receives** message 2 (from Process 2).
 - Process 2 **receives** message 1 (from Process 1), and **broadcasts** message 2.
 - Process 3 **receives** message 1 (from Process 1), then **receives** message 2 (from Process 2).
@@ -30,9 +30,9 @@ In these examples, broadcast messages are denoted by `b<integer>`, unicast messa
 ### Implementation
 
 The process of these implementations are as follows:
-1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective directories with a example input file to utilise (for example, `./dynamic_vc.sh -f examples/broadcast5.txt` to run Example 5 for Dynamic Vector clocks with 4 nodes). The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically.
+1. Either `dynamic_vc.sh` or `matrix_clock.sh` are called from within their respective directories with Phase 1's invocation file to utilise. For example, `./phase1_invoke.sh -f examples/dynamic_vector_clocks/broadcast3.txt -a dvc` to run Example 5 (`-f` flag and value) for Dynamic Vector clocks (`-a` flag and value) with 4 nodes. The shell script will calculate how much processes are needed to run the MPI program initially, and execute the `mpiexec` command dynamically for the specific implementation pased in.
 2. The main algorithm is invoked; Process `0` is responsible for splitting the input line for each process (`1` to `N`) - which is sent at the start of the program.
-3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row. Each process holds onto a local clock, message/hold-back queue and floating-point number to add with message deliveries. On the latter - whenever a process is to send a broadcast/unicast message, it will generate a random floating-point number to add for corresponding receives and eventual deliveries.
+3. After receiving the event list from Process `0` in Step 2: the main `process_loop` is executed by process `N` corresponding to the input row - and each event is determined and actioned upon. Each process holds onto a local clock, message/hold-back queue and floating-point number to add with message deliveries. On the latter - whenever a process is to send a broadcast/unicast message, it will generate a random floating-point number to add for corresponding receives and eventual deliveries.
 4. Messages are thus sent and received - but **not** delivered unless the specific causal deliverability condition is met for either algorithm. Both algorithms implement a similar check on the incoming messages' clock. If both of these conditions are met, the message is delivered and the message's number is added to the process's number. Otherwise it is enqueued in a message/hold back queue:
     - The sender's value at its index in the message clock needs to be **exactly greater than 1** comparative to the value of its' value in the process's local clock.
     - Every other value in the message clock that is not of the sender is **less than or equal** to the receiving process's local clock value.
@@ -41,14 +41,14 @@ The process of these implementations are as follows:
 
 ### Invocation
 
-Invocating either algorithms' implementation is achieved by running the shell script that is provided within each directory - `dynamic_vc.sh` for Dynamic Vector clocks, or `matrix_clock.sh` for Matrix Clocks. These scripts expect a `-f` flag and argument to be passed into the script - which is the example input file you'd like to run the implementation against.
+Invocating either algorithms' implementation is achieved by running the shell script that is provided within Phase 1's root directory - `phase1_invoke.sh`. This script expects two flag and valies `-f <file>` - the example input file you'd like to run the implementation against - and `-a <dvc|matrix>` - either `dvc` or `matrix` to invoke each algorithm's implementation respectfully. The script will calculate the number of processes needed based on the file given and will run `mpiexec` dynamically based on your input.
 
 For example - running `broadcast1.txt` for Dynamic Vector Clocks after cloning the repository:
 
 ```
 git clone git@gitlab.eng.unimelb.edu.au:jsammut/comp90020-double-j.git
 cd comp90020-double-j/phase1_mpi/<implementation>
-./dynamic_vc.sh -f examples/broadcast1.txt
+./phase1_invoke.sh -f examples/dynamic_vector_clocks/broadcast1.txt -a dvc
 ```
 
 The output of the script is the MPI logs and the event timeline for each process. Note the ordering may not always be in order due to the nature of the parallel nature of MPI programs!
