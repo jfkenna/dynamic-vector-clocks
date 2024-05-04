@@ -12,11 +12,24 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
+# Event Functions / Classes
 class EventType(IntEnum):
     UNICAST_EVENT = 0
     BROADCAST_EVENT = 1
     RECEIVE_EVENT = 2
     INTERNAL_EVENT = 3
+
+def determine_and_extract_event(event):
+    if re.match("^r([1-9].*)", event):
+        return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
+    elif re.match("^s([1-9].*)", event):
+        return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
+    elif re.match("^b([1-9].*)", event):
+        return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
+    elif re.match("^([a-zA-Z].*)", event):
+        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
+    else: # Assume its an internal event
+        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
 
 # Messaging Functions
 def send_message(message, dest, tag):
@@ -152,19 +165,6 @@ def merge_dvcs(message_dvc, process_dvc):
             if row_m[0] == row_p[0]:                # Get each DVC's row based on the process ID
                 row_p[1] = max(row_m[1], row_p[1])  # Update row_p in new_process_dvc with max(message row, process row)           
     return new_process_dvc                          # Return new_process_dvc 
-
-def determine_and_extract_event(event):
-    if re.match("^r([1-9].*)", event):
-        return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
-    elif re.match("^s([1-9].*)", event):
-        return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
-    elif re.match("^b([1-9].*)", event):
-        return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
-    elif re.match("^([a-zA-Z].*)", event):
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-    else: # Assume its an internal event
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-
 # Process Loop / main
 def process_loop(event_list, process_events):
     # Process n's initial dynamic VC
