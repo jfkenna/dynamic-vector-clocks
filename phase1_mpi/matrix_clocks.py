@@ -1,9 +1,11 @@
 from mpi4py import MPI
 from enum import IntEnum
-import numpy as np
 from datetime import datetime
-import random
 from time import sleep
+from shared.events import EventType, determine_and_extract_event
+from shared.message import determine_recv_process
+import numpy as np
+import random
 import sys
 import re
 
@@ -12,30 +14,6 @@ comm = MPI.COMM_WORLD
 iproc = comm.Get_rank()
 nproc = comm.Get_size()
 
-# Event Functions / Classes
-class EventType(IntEnum):
-    UNICAST_EVENT = 0
-    BROADCAST_EVENT = 1
-    RECEIVE_EVENT = 2
-    INTERNAL_EVENT = 3
-
-def determine_and_extract_event(event):
-    # If the event is a receive event
-    if re.match("^r([1-9].*)", event):      
-        return re.search("^r([1-9].*)", event), EventType.RECEIVE_EVENT
-    # If the event is a send/unicast event
-    elif re.match("^s([1-9].*)", event):
-        return re.search("^s([1-9].*)", event), EventType.UNICAST_EVENT
-    # If the event is a broadcast event
-    elif re.match("^b([1-9].*)", event):
-        return re.search("^b([1-9].*)", event), EventType.BROADCAST_EVENT
-    # If the event is an internal process event
-    elif re.match("^([a-zA-Z].*)", event):
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-    # Othwerwise - based on some combination not recognized - assume its an internal process event
-    else: 
-        return re.search("^([a-zA-Z].*)", event), EventType.INTERNAL_EVENT
-
 # Messaging Functions
 def send_message(message, dest, tag):
     comm.send(message, dest=dest, tag=int(tag))     # Send the defined message to the dest process with defined tag
@@ -43,19 +21,7 @@ def send_message(message, dest, tag):
 def broadcast_message(message, event_tag, dest_processes):
     # Send the message to all destination processes
     for idx in dest_processes:
-        send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag
-
-def determine_recv_process(event_list, event_tag, event_type):
-    # If the event_type is a send (unicast)
-    match event_type:
-        case EventType.UNICAST_EVENT:
-            target_event = "r" + event_tag                              # The target_event is r<event_tag> 
-            for idx in range(0, len(event_list)):                       # For the index range in event_list
-                if target_event in event_list[idx]:                     # If the target_event is in the idx row of the event_list 
-                    return [idx+1]                                      # Return the process ID of the row that the target_event is in
-        case EventType.BROADCAST_EVENT:
-            dest_processes = [x for x in range(1, nproc) if x != iproc] # Define destination processes
-            return dest_processes                                       # Return the destination processes
+        send_message(message, idx, event_tag)       # Send the defined message to every index defined in dest_processes with the  defined tag                                # Return the destination processes
     
 def generate_message(destinations, process_matrix):
     matrix_message = construct_message_matrix_clock(destinations, process_matrix)       # Constuct the matrix clock for the message
@@ -225,7 +191,7 @@ def process_loop(event_list, process_events):
             # If the event is a broadcast event
             case EventType.BROADCAST_EVENT:
                 event_tag = event_result[0].group(1)                                                                # Parse the event_tag from the first group in event_result[0]
-                destination_processes = determine_recv_process(event_list, event_tag, EventType.BROADCAST_EVENT)    # Determine the receiving process(es) for this broadcast message
+                destination_processes = determine_recv_process(iproc, nproc, event_list, event_tag, EventType.BROADCAST_EVENT)    # Determine the receiving process(es) for this broadcast message
                 print("Broadcast message to Process(es) {0}".format(destination_processes))                         # Printing of upcoming broadcast message sending
                 message = generate_message(destination_processes, process_matrix)                                   # Generate the message (message matrix clock and floating-point number)
 
@@ -240,7 +206,7 @@ def process_loop(event_list, process_events):
             # If the event is a send/unicast event
             case EventType.UNICAST_EVENT:
                 event_tag = event_result[0].group(1)                                                            # Parse the event_tag from the first group in event_result[0]
-                destination_process = determine_recv_process(event_list, event_tag, EventType.UNICAST_EVENT)    # Determine the receiving process for this message
+                destination_process = determine_recv_process(iproc, nproc, event_list, event_tag, EventType.UNICAST_EVENT)    # Determine the receiving process for this message
                 print("Unicast message to process {0}".format(destination_process))                             # Printing of upcoming message sending
                 message = generate_message(destination_process, process_matrix)                                 # Generate the message (message matrix-clock and floating-point number)
 
