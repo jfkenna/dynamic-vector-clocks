@@ -16,7 +16,11 @@ import sys
 import time
 import selectors
 
-def acceptWorker(serverSocket, messagesToHandle, peers):
+
+#TODO UNREGISTER BEFORE CLOSE
+
+
+def acceptWorker(serverSocket, peers):
 
     print('[a0] Started')
     while True:
@@ -32,7 +36,7 @@ def acceptWorker(serverSocket, messagesToHandle, peers):
         with peersLock:
             networkEntries[ip] = buildNetworkEntry(newConnection)
             peers.append(ip)
-        selector.register(newConnection, selectors.EVENT_READ, lambda readable: readCallback(readable, messagesToHandle))
+        selector.register(newConnection, selectors.EVENT_READ, None)
         print(selector)
 
 
@@ -49,12 +53,13 @@ def readWorker(messagesToHandle):
                 print('no entry for peer')
                 continue
 
-            #read available messages, then 
-            continueRead(networkEntry, messagesToHandle)
-            select.register(readableSocket, selectors.EVENT_READ, readCallback)
+            #read available messages 
+            #TODO also lock writes
+            with networkEntry['lock']:
+                continueRead(networkEntry, messagesToHandle)
 
 
-def broadcastWorker(outgoingMessageQueue, peers, processId):
+def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
     global processVectorClock 
     print('[s0] Started')
 
@@ -82,6 +87,7 @@ def broadcastWorker(outgoingMessageQueue, peers, processId):
         #if message originates from UI, hydrate with local clock and processId
         #otherwise, retransmit without changes
         if parsedMessage['sender'] == None:
+            receivedMessages[parsedMessage['id']] = True
             with incrementLock:
                 processVectorClock = incrementVectorClock(processVectorClock, processId)
                 outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, parsedMessage['text'], processId))
@@ -91,16 +97,16 @@ def broadcastWorker(outgoingMessageQueue, peers, processId):
         broadcastToPeers(outgoingMessage, peers)
 
 
-def handlerWorker(messagesToHandle, outgoingMessageQueue):
+def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
     while True:
         #TODO can put a timeout here, then check if flag for exit is set
         messageInfo = messagesToHandle.get()
 
         message = parseJsonMessage(messageInfo[1], [], True)
-        #do nothing if connection crashes at some stage before message is handled
-        peerNetworkData = networkEntries.get(messageInfo[0], None)
-        if peerNetworkData == None:
+        if message == None:
+            print("Got bad message")
             continue
+        peerNetworkData = messageInfo[0]
 
         if message['type'] == MessageType.HELLO:
             handleHello(peerNetworkData, message)
@@ -130,7 +136,6 @@ def handleHello(networkEntry, message):
             #TODO handle peer failure
             print('Failed to send clone data to peer. Remaining unitialised')
             return
-        silentFailureClose(senderSocket)
         
         #initialise after sending peer data
         handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
@@ -273,7 +278,7 @@ def sayHello(peers, outgoingMessageQueue):
 def main():
 
     #messages that have been read from a socket and need to be handled
-    #[(peer, message)]
+    #[(networkEntry, message)]
     messagesToHandle = Queue()
 
     #messages that need to be broadcast
@@ -285,10 +290,6 @@ def main():
     
     #use with 'messageLock' to ensure mutex
     receivedMessages = {}
-
-    #initial message collector (use while hello call is in-flight)
-    #use with 'preInitialisedLock' to ensure mutex
-    preInitialisedReceivedMessages = []
 
     #TODO consider adding new peers at runtime based on received messages, so network is more fault tolerant
     #it's very brittle right now - if you add a single peer that only knows one other peer, it's a network partition waiting to happen
@@ -346,6 +347,7 @@ def main():
             p2pSocket.connect((peer, int(env['PROTOCOL_PORT'])))
             networkEntries[peer] = buildNetworkEntry(p2pSocket)
             peers.append(peer)
+            selector.register(p2pSocket, selectors.EVENT_READ, None)
         except socket.error:
             print('Could not establish connection for peer {0}'.format(peer))
             print('Proceeding without it')
@@ -361,8 +363,8 @@ def main():
     handlerWorkers = []
     readWorkers = []
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
-        broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, peers, processId)))
-        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, outgoingMessageQueue)))
+        broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers, processId)))
+        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, outgoingMessageQueue)))
         readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, )))
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers[i].start()
@@ -376,7 +378,7 @@ def main():
     acceptSocket.listen()
     print('Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
     print("Process ID is", processId)
-    acceptThread = Thread(target=acceptWorker, args=(acceptSocket, messagesToHandle, peers))
+    acceptThread = Thread(target=acceptWorker, args=(acceptSocket, peers))
     acceptThread.start()
 
 
@@ -425,6 +427,13 @@ print('Combined env and argv config:', dict(env))
 
 #connections in the system. peer -> (socket, socket lock, current message size, read bytes buffer)
 networkEntries = {}
+
+
+#TODO CHECK MULTITHREADING IS OK WITH THIS
+#initial message collector (use while hello call is in-flight)
+#use with 'preInitialisedLock' to ensure mutex
+preInitialisedReceivedMessages = []
+
 
 #selector over sockets
 selector = selectors.DefaultSelector()

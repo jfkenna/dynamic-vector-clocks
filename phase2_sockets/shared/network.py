@@ -1,5 +1,6 @@
 import struct
 import socket
+from threading import Lock
 
 #All messages sent by the system follow the following format:
 #Each connection only sends a single message before closing, so there is no need to define separators
@@ -26,13 +27,14 @@ def buildNetworkEntry(connection):
     return {
         'connection': connection,
         'contentLength': None,
-        'buffer': b''
+        'buffer': b'',
+        'lock': Lock()
     }
 
 
 def continueRead(networkEntry, messageQueue):
     headerSize = struct.calcsize('!l')
-    data = networkEntry['connection'].recvfrom(2048)
+    data = networkEntry['connection'].recv(2048)
 
     if not data:
         return True
@@ -44,21 +46,22 @@ def continueRead(networkEntry, messageQueue):
     while True:
         if networkEntry['contentLength'] == None:
             #if we have read enough data to know the message length, extract it
-            if networkEntry['buffer'] >= headerSize:
-                contentLength = struct.unpack('!l', networkEntry['buffer'][:headerSize])[0]
+            if len(networkEntry['buffer']) >= headerSize:
+                networkEntry['contentLength'] = struct.unpack('!l', networkEntry['buffer'][:headerSize])[0]
                 networkEntry['buffer'] = networkEntry['buffer'][headerSize:]
-
             #if haven't received enough data to know the message length, return
             else:
                 return False
 
         #read complete message and remove it from the buffer if possible
-        if len(networkEntry['buffer']) >= networkEntry['contentLength']:
+        if networkEntry['contentLength'] != None and (len(networkEntry['buffer']) >= networkEntry['contentLength']):
             message = networkEntry['buffer'][:networkEntry['contentLength']]
             networkEntry['buffer'] = networkEntry['buffer'][networkEntry['contentLength']:]
+            networkEntry['contentLength'] = None
 
             #associate message with sender
-            messageWithPeer = (peer, message)
+            print("Got message", message)
+            messageWithPeer = (networkEntry, message)
             messageQueue.put(messageWithPeer)
 
         #if no complete messages are present, return
@@ -67,6 +70,7 @@ def continueRead(networkEntry, messageQueue):
 
 def sendToSingleAdr(message, connectedSocket):
     try:
+        print("Try send {0} to {1}".format(message, connectedSocket))
         sendWithHeaderAndEncoding(connectedSocket, message)
     except socket.error:
         print('Error sending message to peer: {0}'.format(socket.error))
