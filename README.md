@@ -254,6 +254,10 @@ Just like the previous implementation without the central peer registry server -
 
 ![P2P Messaging App - With a central peer registry server](/phase2_sockets/images/phase2-with-central-server.png)
 
+## Presentation
+
+Team Double-J's presentation presented on this project can be found in the `/presentation` directory.
+
 ## Bibliography
 [1] N. Meghanathan. Module 6.2.3 Matrix Algorithm Causal Delivery of Messages. (Nov. 12, 2013). Accessed: Mar. 13, 2024. [Online video]. Available: https://www.youtube.com/watch?v=WgTx7BHWzts.<br/>
 [2] T. Landes. "Dynamic Vector Clocks for Consistent Ordering of Events in Dynamic Distributed Applications." in International Conference on Parallel and Distributed Processing Techniques and Applications, Las Vegas, Nevada, USA, 2006, pp.1-7.<br/>
