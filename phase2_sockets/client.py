@@ -151,7 +151,8 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     while True:
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
-        processVectorClock = incrementVectorClock(processVectorClock, processId)
+        with incrementLock:
+            processVectorClock = incrementVectorClock(processVectorClock, processId)
         outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
         broadcastToPeers(outgoingMessage, peers)
 
@@ -306,16 +307,16 @@ def handleMessage(message, receivedMessages, peers):
     broadcastToPeers(jsonMessage, peers)
     # If this processId is the sender of the message
     if not message['sender'] == processId:
-        #print("Deliver/update the VC of the receiver if causality met?")
-        if canDeliver(processVectorClock, message):
-            #print("initial process VC", processVectorClock)
-            processVectorClock = deliverMessage(processVectorClock, message, processId)
-            textUpdateGUI(message['sender'], message['text'])
-        else:
-            processMessageQueue.append(message)
+        with deliverabilityLock:
+            #print("Deliver/update the VC of the receiver if causality met?")
+            if canDeliver(processVectorClock, message):
+                #print("initial process VC", processVectorClock)
+                processVectorClock = deliverMessage(processVectorClock, message, processId)
+                textUpdateGUI(message['sender'], message['text'])
+            else:
+                processMessageQueue.append(message)
 
-        processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
-
+            processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
 
 def registerAndCompleteInitialisation():
     if int(env['ENABLE_PEER_SERVER']) == 1:
@@ -351,7 +352,6 @@ def sendToSingleAdr(message, senderSocket, adr, port):
         return True
     return False
 
-
 def broadcastToPeers(message, peers):
     failedCount = 0
     for peer in peers:
@@ -369,8 +369,6 @@ def broadcastToPeers(message, peers):
         print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
         return True
     return False
-
-
 
 def getPeerHosts():
     initialPeers = []
@@ -392,7 +390,6 @@ def getPeerHosts():
             print('Couldn\'t resolve hostname, enter a different value')
             continue
 
-
 def sayHello(peers):
     helloMessage = messageToJson(constructHello(processId))
     if broadcastToPeers(helloMessage, peers):
@@ -402,11 +399,8 @@ def sayHello(peers):
         registerAndCompleteInitialisation()
 
 def main():
-
     #create shared resources
-    #suprisingly, default python queue is thread-safe and blocks on .get()
     connectionQueue = Queue()
-    
     #use with 'messageLock' to ensure mutex
     receivedMessages = {}
 
@@ -532,6 +526,12 @@ messageLock = Lock()
 
 #global lock for pre-initialisation message queue
 preInitialisedLock = Lock()
+
+#global lock for checking for message deliverability
+deliverabilityLock = Lock()
+
+#global lock for this peer to increment its own vector clock
+incrementLock = Lock()
 
 #initialisation complete event
 initialisationComplete = Event()

@@ -1,6 +1,3 @@
-#TODO add locking to the vector clock
-
-
 def incrementVectorClock(processVectorClock, processId):
     revisedVectorClock = processVectorClock
     for clock in processVectorClock:
