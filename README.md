@@ -123,7 +123,7 @@ The process of Phase 2's implementations is based as follows:
 
 As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below: 
 
-#### Without a Peer Registration Server
+#### Without a Peer Registry Server
 
 Within a new terminal - clone the codebase (if not already done from phase 1) and change the working directory to `/phase2_sockets`. Ensure that in the `.env` file, `ENABLE_PEER_SERVER` is set to `0` (this is the default value)/
 
@@ -185,7 +185,7 @@ Upon a client/peer starting - a local Kivy window will appear where they can ent
 
 ![P2P Messaging App - Without a central peer registry server](/phase2_sockets/images/phase2-no-server.png){width=50%}
 
-#### With a Peer Registration Server
+#### With a Peer Registry Server
 
 Within a new terminal - clone the codebase (if not already done from phase 1) and change the working directory to `/phase2_sockets`. Ensure that in the `.env` file, `ENABLE_PEER_SERVER` is set to `1` to enable the central peer registry server. You might want to also change its port via `REGISTRY_PROTOCOL_PORT` in `.env`
 
@@ -293,3 +293,4 @@ Team Double-J's presentation presented on this project can be found in the `/pre
 [32] Linuxize. "Bash if..else Statement". Linuxize. https://stackoverflow.com/questions/67428689/how-to-pass-multiple-flag-and-multiple-arguments-in-getopts-in-shell-script (accessed May. 4, 2024).<br/>
 [33] Kivy. "Kivy: The Open Source Python App Development Framework.". Kivy. https://kivy.org/ (accessed May. 4, 2024).<br/>
 [34] R. Strahl. "Getting Images into Markdown Documents and Weblog Posts with Markdown Monster". Medium. https://medium.com/markdown-monster-blog/getting-images-into-markdown-documents-and-weblog-posts-with-markdown-monster-9ec6f353d8ec (accessed May. 5, 2024).<br/>
+[35] cantdutchthis. "Changing image size in Markdown". Stack Overflow. https://stackoverflow.com/questions/14675913/changing-image-size-in-markdown (accessed May. 5, 2024).<br/>
