@@ -16,6 +16,9 @@ import time
 import selectors
 import copy
 
+#************************************************************
+#worker thread for accepting incoming connections
+#creates new network entries representing the connection
 def acceptWorker(serverSocket, peers):
     print('[a0] Started')
     serverSocket.settimeout(0.1)
@@ -36,6 +39,10 @@ def acceptWorker(serverSocket, peers):
             updateLivePeerCountGUI(len(peers))
         selector.register(newConnection, selectors.EVENT_READ, None)
 
+
+#************************************************************
+#worker thread for reading messages from connected sockets
+#will read from any socket with available bytes to read
 def readWorker(messagesToHandle, peers):
     while True:
         if shutdownFlag.is_set():
@@ -67,7 +74,9 @@ def readWorker(messagesToHandle, peers):
                 handlePeerFailure(peer, peers)
                 
 
-
+#************************************************************
+#worker thread for broadcasting enqueued messages
+#used for sending own messages, and for rebroadcasting messages from other peers
 def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
     global processVectorClock 
     print('[s0] Started')
@@ -109,6 +118,9 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
         broadcastToPeers(outgoingMessage, peers)
 
 
+#************************************************************
+#worker thread for controlling message flow and responding to HELLO/HELLO_RESPONSE messages
+#passes off rebroadcast tasks to the broadcast worker
 def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
     while True:
         if shutdownFlag.is_set():
@@ -126,7 +138,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
         peerNetworkData = messageInfo[0]
 
         #ADDITION FOR DEMONSTRATION
-        #SIMULATED LAG - ADD MESSAGE TO THE QUEUE AFTER 5 SECONDS
+        #SIMULATES NETWORK DELAY BY ADDING MESSAGES TO THE QUEUE AFTER 5 SECONDS HAVE PASSED
         if int(env['ENABLE_NETWORK_DELAY']) == 1 and message['type'] == MessageType.BROADCAST_MESSAGE:
             try:
                 if message['sender'] == env['THROTTLED_IP']:
@@ -143,7 +155,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
             except socket.error:
                 continue
 
-        #handle message
+        #handle messages
         if message['type'] == MessageType.HELLO:
             handleHello(peerNetworkData, message)
         if message['type'] == MessageType.HELLO_RESPONSE:
@@ -154,6 +166,9 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
             print('[w{0}] Parse error'.format(id))
             continue
 
+
+#************************************************************
+#reply to hello messages with copy of own state
 def handleHello(networkEntry, message):
     #allow other nodes to initialise by cloning a node with no peers
     #this allows the first connection to be made
@@ -195,6 +210,10 @@ def handleHello(networkEntry, message):
             print('Failed to send clone data to peer')
             return
 
+
+#************************************************************
+#consume hello response to build initial peer state
+#once complete, process is an exact clone of another peer's previous state
 def handleHelloResponse(networkEntry, message):
     #discard message if we have already cloned a process
     if initialisationComplete.is_set():
@@ -211,10 +230,14 @@ def handleHelloResponse(networkEntry, message):
         registerAndCompleteInitialisation()
     
 
+#************************************************************
+#handle broadcast messages received from other processes
+#vector clock ensures causal delviery of received broadcasts
 def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
     global processVectorClock
     global processMessageQueue
 
+    #avoid double processing messages
     with messageLock:
         if message['id'] in receivedMessages:
             return
@@ -232,7 +255,7 @@ def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
     jsonMessage = messageToJson(message)
     outgoingMessageQueue.put(jsonMessage)
 
-    # If this processId is the sender of the message
+    #if this processId is the sender of the message, don't worry about delivering message
     if not message['sender'] == processId:
         with deliverabilityLock:
             if canDeliver(processVectorClock, message):
@@ -243,6 +266,11 @@ def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
             processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message, textUpdateGUI)
 
 
+
+#************************************************************
+#completes peer setup by
+#1. registering with the peer server if it's enabled
+#2. flagging that peer initialisation is complete
 def registerAndCompleteInitialisation():
     if int(env['ENABLE_PEER_SERVER']) == 1:
         try:
@@ -260,13 +288,17 @@ def registerAndCompleteInitialisation():
     initialisationComplete.set()
 
 
+#************************************************************
+#helper, constructs socket for establishing initial connection to another peer
 def buildSenderSocket():
     senderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     senderSocket.bind((env['CLIENT_LISTEN_IP'], 0)) #bind to specific sender adr so we can receive replies
-    senderSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
+    senderSocket.settimeout(0.25)
     return senderSocket
 
 
+#************************************************************
+#helper, sends a single message to all peers
 def broadcastToPeers(message, peers):
 
     #clone peer list so that multiple workers to broadcast different messages
@@ -286,6 +318,9 @@ def broadcastToPeers(message, peers):
             handlePeerFailure(peer, peers)
 
 
+#************************************************************
+#helper, used to update peer list and network info when a peer's connection fails
+#if peers fall to 0, triggers the display of a warning message
 def handlePeerFailure(peer, peers):
     with peersLock:
         connection = networkEntries[peer]['connection']
@@ -307,6 +342,9 @@ def handlePeerFailure(peer, peers):
             statusUpdateGUI('NEW MESSAGES MAY NOT HAVE BEEN RECEIVED', True)
 
 
+#************************************************************
+#helper for updating peer list and network info when a connection fails
+#if the number of connected peers falls to 0, triggers the display of a warning message
 def getPeerHosts():
     initialPeers = []
     print("Enter peer IPs/hostnames [enter \'finished\' or \'f\' to continue]")
@@ -328,10 +366,12 @@ def getPeerHosts():
             continue
 
 
+#************************************************************
+#helper, enqueues the node's initial HELLO message
 def sayHello(peers, outgoingMessageQueue):
     helloMessage = messageToJson(constructHello(processId))
     outgoingMessageQueue.put(helloMessage)
-    registerAndCompleteInitialisation()
+    registerAndCompleteInitialisation() #TODO - STOP INITIALISATION UNTIL HELLO COMPLETES
 
 def main():
 
