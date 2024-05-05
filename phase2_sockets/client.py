@@ -27,9 +27,7 @@ def acceptWorker(connectionQueue, serverSocket):
 def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
 
-    #TODO messy, but I still can't figure out how to pass in args when launching app
-    #it works with globals, but that makes client.py far too bloated
-    #pass in queue once GUI starts
+    #pass in queue once GUI is ready for binding
     while True:
         if App.get_running_app():
             App.get_running_app().setQueue(outgoingMessageQueue)
@@ -45,7 +43,9 @@ def sendWorker(outgoingMessageQueue, peers, processId):
         with incrementLock:
             processVectorClock = incrementVectorClock(processVectorClock, processId)
         outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
-        broadcastToPeers(outgoingMessage, peers)
+
+        if broadcastToPeers(outgoingMessage, peers):
+            statusUpdateGUI('Last message failed to deliver to any peers - we may have been partitioned from the network.', True)
 
 def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
@@ -156,8 +156,6 @@ def handleMessage(message, receivedMessages, peers):
 
     #while our setup is incomplete, don't broadcast to peers, and don't attempt to deliver
     #simply enqueue and return - delivery will be handled once setup completes
-    #TODO triple check there's no flow where messages can be missed here
-    #i think the lock order is OK, but confirmation is always nice
     with preInitialisedLock:
         if not initialisationComplete.is_set():
             preInitialisedReceivedMessages.append(message)
@@ -169,7 +167,10 @@ def handleMessage(message, receivedMessages, peers):
 
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     jsonMessage = messageToJson(message)
-    broadcastToPeers(jsonMessage, peers)
+    if broadcastToPeers(jsonMessage, peers):
+        statusUpdateGUI('Last message failed to deliver to any peers. There is a chance future messages may not be delivered.', True)
+
+
     # If this processId is the sender of the message
     if not message['sender'] == processId:
         with deliverabilityLock:
@@ -213,10 +214,7 @@ def broadcastToPeers(message, peers):
         silentFailureClose(senderSocket)
     
     if (failedCount == len(peers)):
-        #TODO decide on error handling here
-        #maybe try to get a new set of peers from the server, and if that also fails, close completely?
-        print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
-        statusUpdateGUI('No peers were able to receive message. We may be disconnected from the network', True)
+        print('Last message failed to deliver to any peers')
         return True
     else:
         clearStatusGUI()
@@ -247,12 +245,13 @@ def getPeerHosts():
 def sayHello(peers):
     helloMessage = messageToJson(constructHello(processId))
     if broadcastToPeers(helloMessage, peers):
-        #TODO also need logic to handle the case where peer receives request but never replies
-        #could be handled with a timer. But to be honest, this server logic is growing really complex
         print('Failed to send HELLO message to any of our peers. Registering and starting with an empty clock')
         registerAndCompleteInitialisation()
 
 def main():
+
+    #represent connections. Each peer maps to dict containing --> (socket, socket lock, current message size, read bytes buffer)
+    networkEntries = {}
 
     #globally shared outgoing message queue
     outgoingMessageQueue = Queue()

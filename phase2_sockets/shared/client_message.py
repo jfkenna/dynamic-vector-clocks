@@ -67,7 +67,6 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
                 print('Message was missing required field {0}'.format(required))
                 return None
 
-    #TODO validate type of individual fields
     return parsedMessage
 
 '''

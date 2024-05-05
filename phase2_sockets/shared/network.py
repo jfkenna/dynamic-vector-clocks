@@ -20,29 +20,50 @@ def sendWithHeaderAndEncoding(connection, message):
     withHeader = prependContentLengthHeader(encoded)
     return connection.send(withHeader)
 
-#we assume that each connection is opened, sends a single message, and is then closed
-#in such a system, there is no need to read until a terminator - simply wait for connection to close or message length to be read
-def readSingleMessage(connection):
-    headerSize = struct.calcsize('!l')
-    contentLength = None
-    received = b''
-    while True:
-        data = connection.recv(2048)
 
-        #return early if socket closed early
-        if not data:
-            return None
-        
-        received = received + data
-        
-        #extract message length if not already set
-        if contentLength == None and len(received) >= headerSize:
-            contentLength = struct.unpack('!l', received[:headerSize])[0]
-            received = received[headerSize:]
-        
-        #return once entire message read
-        if len(received) >= contentLength:
-            return received
+#peer -> (connection, received buffer, current message length)
+def addNetworkReaderEntry(peer, connection, connectionDict):
+    networkEntry = {
+        'connection': connection,
+        'contentLength': None,
+        'buffer': b''
+    }
+    connectionDict[peer] = networkEntry
+
+
+def continueRead(networkEntry):
+    headerSize = struct.calcsize('!l')
+    data = networkEntry['connection'].recvfrom(2048)
+    
+    #TODO handle early socket close
+    if not data:
+        print('TODO HANDLE EARLY CLOSE')
+    
+    networkEntry['buffer'] += data
+    
+    #handle complete messages until no FULLY COMPLETE messages remain
+    #partial messages may still be in the buffer
+    while True:
+        if networkEntry['contentLength'] == None:
+            #if we have read enough data to know the message length, extract it
+            if networkEntry['buffer'] >= headerSize:
+                contentLength = struct.unpack('!l', networkEntry['buffer'][:headerSize])[0]
+                networkEntry['buffer'] = networkEntry['buffer'][headerSize:]
+
+            #if haven't received enough data to know the message length, return
+            else:
+                return
+
+        #read complete message and remove it from the buffer if possible
+        if len(networkEntry['buffer']) >= networkEntry['contentLength']:
+            message = networkEntry['buffer'][:networkEntry['contentLength']]
+            networkEntry['buffer'] = networkEntry['buffer'][networkEntry['contentLength']:]
+            #handle message?
+
+        #if no complete messages are present, return
+        else:
+            return
+
 
 def sendToSingleAdr(message, senderSocket, adr, port):
     try:

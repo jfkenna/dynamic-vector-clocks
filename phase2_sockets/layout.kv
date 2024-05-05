@@ -106,6 +106,13 @@
                 size_hint: (.8, 1)
             Button:
                 text:'Send'
-                background_color: (0,0,1,1)
+                background_normal: ''
+                background_color: (0,0.47,0.96,1)
+                canvas.before:
+                    Color:
+                        rgba: (1,1,1,1)
+                    Rectangle:
+                        size: self.size
+                        pos: self.pos
                 size_hint: (.2, 1)
                 on_release: root.addMessage()
