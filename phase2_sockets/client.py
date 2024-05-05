@@ -6,28 +6,40 @@ from shared.validator import validateEnv
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
-from shared.network import sendWithHeaderAndEncoding, readSingleMessage
+from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose, sendToSingleAdr
+from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI
+from kivy.lang import Builder
+from kivy.app import App
 import socket
 import uuid
 import sys
 import time
 
-def silentFailureClose(connection):
-    try:
-        connection.close()
-    except:
-        pass
-
 def acceptWorker(connectionQueue, serverSocket):
     print('[a0] Started')
     while True:
+        print(shutdownFlag.is_set())
+        if shutdownFlag.is_set():
+            return
         connectionQueue.put(serverSocket.accept())
-        #print('[a0] Accepted connection')
 
 
 def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
+
+    #TODO messy, but I still can't figure out how to pass in args when launching app
+    #it works with globals, but that makes client.py far too bloated
+    #pass in queue once GUI starts
     while True:
+        if App.get_running_app():
+            App.get_running_app().setQueue(outgoingMessageQueue)
+            break
+        time.sleep(0.005)
+    
+    #main loop
+    while True:
+        if shutdownFlag.is_set():
+            return
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
         processVectorClock = incrementVectorClock(processVectorClock, processId)
@@ -39,6 +51,8 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
     global processVectorClock
     global processMessageQueue
     while True:
+        if shutdownFlag.is_set():
+            return
         connection, adr = connectionQueue.get()
         try:
             #attempt to read a single message from the connection
@@ -113,8 +127,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
         #special handling for hello responses
         if message['type'] == MessageType.HELLO_RESPONSE:
 
-            print('GOT HELLO RESPONSE')
-
             #discard message if we have already cloned a process
             if initialisationComplete.is_set():
                 continue
@@ -132,14 +144,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
 
         #handle standard messages
         handleMessage(message, receivedMessages, peers)
-
-
-def UIWorker(outgoingMessageQueue):
-    print('===CHAT STARTED=======')
-    while True:
-        newMessageText = input()
-        outgoingMessageQueue.put(newMessageText)
-
 
 def handleMessage(message, receivedMessages, peers):
 
@@ -162,19 +166,14 @@ def handleMessage(message, receivedMessages, peers):
     global processVectorClock
     global processMessageQueue
 
-    
-    #print("Sender:",message["sender"])
-    #print("Receiver:",processId)
-    #print(processVectorClock)
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     jsonMessage = messageToJson(message)
     broadcastToPeers(jsonMessage, peers)
     # If this processId is the sender of the message
-    if not message["sender"] == processId:
-        #print("Deliver/update the VC of the receiver if causality met?")
+    if not message['sender'] == processId:
         if canDeliver(processVectorClock, message):
-            #print("initial process VC", processVectorClock)
             processVectorClock = deliverMessage(processVectorClock, message, processId)
+            textUpdateGUI(message['sender'], message['text'])
         else:
             processMessageQueue.append(message)
 
@@ -202,38 +201,24 @@ def buildSenderSocket():
     senderSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
     return senderSocket
 
-def sendToSingleAdr(message, senderSocket, adr, port):
-    try:
-        senderSocket.connect((adr, port))
-    except socket.error:
-        print('Error connecting to adr: {0}'.format(socket.error))
-        return True
-    try:
-        sendWithHeaderAndEncoding(senderSocket, message)
-    except socket.error:
-        print('Error sending message to peer: {0}'.format(socket.error))
-        return True
-    return False
-
 
 def broadcastToPeers(message, peers):
     failedCount = 0
     for peer in peers:
-        #print("Broadcasting to peer {0}".format(peer))
-        #print("trying with peer {0}".format(peer))
         senderSocket = buildSenderSocket()
         if sendToSingleAdr(message, senderSocket, peer, int(env['PROTOCOL_PORT'])):
             failedCount += 1
         silentFailureClose(senderSocket)
-        #print('broadcast {0} to {1}'.format(message, peer))
     
     if (failedCount == len(peers)):
         #TODO decide on error handling here
         #maybe try to get a new set of peers from the server, and if that also fails, close completely?
         print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
+        statusUpdateGUI('No peers were able to receive message. We may be disconnected from the network', True)
         return True
+    else:
+        clearStatusGUI()
     return False
-
 
 
 def getPeerHosts():
@@ -267,10 +252,12 @@ def sayHello(peers):
 
 def main():
 
+    #globally shared outgoing message queue
+    outgoingMessageQueue = Queue()
+
     #create shared resources
     #suprisingly, default python queue is thread-safe and blocks on .get()
     connectionQueue = Queue()
-    outgoingMessageQueue = Queue()
     
     #use with 'messageLock' to ensure mutex
     receivedMessages = {}
@@ -357,18 +344,18 @@ def main():
     else:
         print('waiting for at least one other peer to establish connection...')
 
-    #don't start the input thread until hello completes
+    #don't start the GUI until hello completes
     while not initialisationComplete.is_set():
         time.sleep(0.1)
 
-    #UI input thread
-    inputThread = Thread(target=UIWorker, args=(outgoingMessageQueue, ))
-    inputThread.start()
+    #start GUI from template file
+    Builder.load_file('layout.kv')
+    GUI(title='CHAT CLIENT [{0}]'.format(env['CLIENT_LISTEN_IP'])).run()
 
-    inputThread.join()
-    sendThread.join()
-    acceptThread.join()
-    handlerThreads.join()
+    #set exit flag once GUI terminates
+    #TODO get this actually working, right now it fails due to threads blocking (python has no thread interrupt method)
+    shutdownFlag.set()
+    acceptSocket.close()
 
 
 #handle .env as global variable
@@ -392,6 +379,9 @@ if (int(env['ENABLE_PEER_SERVER']) == 1):
     env['PEER_REGISTRY_IP'] = sys.argv[2]
 
 print('Combined env and argv config:', dict(env))
+
+#shutdown event
+shutdownFlag = Event()
 
 #global lock for received message dict
 messageLock = Lock()

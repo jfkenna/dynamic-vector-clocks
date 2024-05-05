@@ -1,0 +1,111 @@
+<LabelContainer>:
+    orientation: 'vertical'
+    adaptive_height: True
+    
+    sender: 'sender'
+    msg: 'msg'
+    padding: "8dp"
+    height: messageComponent.height + senderComponent.height + 25
+    width: root.width
+
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                #ripping off the iMessage colours
+                rgba: (0,0.47,0.96,1) if root.sender == 'You' else (0.5,0.5,.5,1)
+            RoundedRectangle:
+                size: self.size
+                pos: self.pos
+                radius: [35, 20, 35, 0] if root.sender == 'You' else [20, 35, 0, 35]
+        Label:
+            id: senderComponent
+            padding: [25, 0, 0, 0] if root.sender == 'You' else [0,0,25,0]
+            text: root.sender
+            text_size: self.size
+            size_hint_y: None
+            halign: 'left' if root.sender == 'You' else 'right'
+            valign: 'top'
+            height: self.texture_size[1]
+            markup: True
+        Label:
+            id: messageComponent
+            padding: '8dp'
+            text: root.msg
+            text_size: self.width, None
+            size_hint_y: None
+            height: self.texture_size[1]
+            halign: 'left'
+            valign: 'top'
+            markup: True
+
+<Messages>:
+    viewclass: 'LabelContainer'
+    bar_width: dp(5)
+    size_hint: (1, 1)
+    scroll_type: ["bars", "content"]
+    RecycleBoxLayout:
+        size_hint: (1, None)
+        height: self.minimum_height
+        default_size_hint_x: 1
+        padding: [50, 0, 50, 0]
+        orientation: 'vertical'
+        key_size: '_size'
+
+<ErrorStatus>:
+    canvas.before:
+        Color:
+            rgba: self.rgba
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<MainScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: (1,1,1,1)
+            Rectangle:
+                size: self.size
+                pos: self.pos
+        ErrorStatus:
+            orientation: 'horizontal'
+            size_hint: (1, .1)
+            canvas.before:
+                Color: 
+                    rgba: self.rgba
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            Label:
+                text: ''
+                color: (0,0,0,1)
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: (1, .75)
+            canvas.before:
+                Color:
+                    rgba: (0.8,0.8,0.8,1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            Messages
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: (1, .15)
+            canvas.before:
+                Color:
+                    rgba: (1,1,1,1)
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+            TextInput:
+                text: ''
+                multiline: True
+                size_hint: (.8, 1)
+            Button:
+                text:'Send'
+                background_color: (0,0,1,1)
+                size_hint: (.2, 1)
+                on_release: root.addMessage()
