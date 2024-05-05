@@ -1,13 +1,12 @@
 from threading import Thread, Lock, Event
 from queue import Queue
-from dotenv import dotenv_values
 from concurrent.futures import ThreadPoolExecutor
-from shared.validator import validateEnv
+from shared.env_handler import loadArgsAndEnvClient
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 from shared.network import continueRead, silentFailureClose, sendToSingleAdr, buildNetworkEntry
-from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI, updateLivePeerCountGUI
+from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, updateLivePeerCountGUI
 from kivy.lang import Builder
 from kivy.app import App
 import socket
@@ -18,13 +17,11 @@ import selectors
 import copy
 
 def acceptWorker(serverSocket, peers):
-
     print('[a0] Started')
     while True:
         if shutdownFlag.is_set():
             return
         
-        #TODO double check that network entry is always ready by the time messages are received
         newConnection, adr = serverSocket.accept()
         ip = adr[0]
         newConnection.setblocking(False)
@@ -32,8 +29,8 @@ def acceptWorker(serverSocket, peers):
         with peersLock:
             networkEntries[ip] = buildNetworkEntry(newConnection)
             peers.append(ip)
+            updateLivePeerCountGUI(len(peers))
         selector.register(newConnection, selectors.EVENT_READ, None)
-
 
 def readWorker(messagesToHandle, peers):
     while True:
@@ -263,26 +260,27 @@ def broadcastToPeers(message, peers):
 
         if sendFailed:
             handlePeerFailure(peer, peers)
-    else:
-        clearStatusGUI()
 
 
 def handlePeerFailure(peer, peers):
-    print("HANDLING PEER FAILURE")
     with peersLock:
         connection = networkEntries[peer]['connection']
         del networkEntries[peer]
         peers.remove(peer)
         selector.unregister(connection)
         silentFailureClose(connection)
-
         remainingPeers = len(peers)
         updateLivePeerCountGUI(remainingPeers)
 
-        #handle total failure case
-        #TOOD exit system
+        #If there was some point in time where we were not connected to any peers
+        #we might have missed a message, so all messages that were causally linked to that message
+        #can never be delivered. Flag to the user that we may be in that state, so they can make the
+        #decision to restart or not.
+        #
+        #In a real application, it would make sense to shut the app completely
+        #but as this is a demo, it's better to show we are able to detect this type of failure
         if remainingPeers == 0:
-            print('Totally disconnected from network')
+            statusUpdateGUI('NEW MESSAGES MAY NOT HAVE BEEN RECEIVED', True)
 
 
 def getPeerHosts():
@@ -309,8 +307,6 @@ def getPeerHosts():
 def sayHello(peers, outgoingMessageQueue):
     helloMessage = messageToJson(constructHello(processId))
     outgoingMessageQueue.put(helloMessage)
-
-    #TODO check if any peers are alive
     registerAndCompleteInitialisation()
 
 def main():
@@ -330,10 +326,8 @@ def main():
     #use with 'messageLock' to ensure mutex
     receivedMessages = {}
 
-    #TODO consider adding new peers at runtime based on received messages, so network is more fault tolerant
-    #it's very brittle right now - if you add a single peer that only knows one other peer, it's a network partition waiting to happen
-    #this is an extension, so for our first implementation just start with a fixed set of peers that we can multicast to
-
+    #room for extension - add new peers at runtime based on received messages, so network is more fault tolerant
+    #not added for this project, as this is just a demonstration of our vector clocks and causal delivery
 
     #get peers from peer server or command line based on params
     if int(env['ENABLE_PEER_SERVER']) == 1:
@@ -438,52 +432,28 @@ def main():
     acceptSocket.close()
 
 
-#handle .env as global variable
-#parse and validate, then call main()
-env = dotenv_values('.env')
-if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'REGISTRY_PROTOCOL_PORT', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
-    print('.env failed validation, exiting...')
-    exit()
+#************************************************************
+#setup env
 
-if len(sys.argv) < 2:
-    print("You must provide the client's ip, exiting...")
-    exit()
-env['CLIENT_LISTEN_IP'] = sys.argv[1]
-
-if int(env['ENABLE_PEER_SERVER']) == 1 and len(sys.argv) < 3:
-    print("ENABLE_PEER_SERVER flag was set, but you did not provide the ip of a peer registry")
-    print("exiting...")
-    exit()
-
-if (int(env['ENABLE_PEER_SERVER']) == 1):
-    env['PEER_REGISTRY_IP'] = sys.argv[2]
-
-if (int(env['ENABLE_NETWORK_DELAY']) == 1 and len(sys.argv) < 3):
-    print("ENABLE_NETWORK_DELAY flag was set, but you did not provide an address to throttle")
-    print("exiting...")
-    exit()
-if int(env['ENABLE_NETWORK_DELAY']) == 1:
-    env['THROTTLED_IP'] = sys.argv[2]
- 
+env = loadArgsAndEnvClient(sys.argv)
 print('Combined env and argv config:', dict(env))
 
-#connections in the system. peer -> (socket, socket lock, current message size, read bytes buffer)
+#************************************************************
+#state
+
+#maps a peer --> object containing peer socket, socket lock, current message size, read buffer
 networkEntries = {}
 
+#initial message collector, stores edge case messages that arrive before HELLO_RESPONSE arrives
+preInitialisedReceivedMessages = [] #use with 'preInitialisedLock' to ensure mutex
 
-#TODO CHECK MULTITHREADING IS OK WITH THIS
-#initial message collector (use while hello call is in-flight)
-#use with 'preInitialisedLock' to ensure mutex
-preInitialisedReceivedMessages = []
-
-
-#selector over sockets
+#read socket selector
 selector = selectors.DefaultSelector()
 
-#shutdown event
-shutdownFlag = Event()
-
+#************************************************************
 #locks
+
+#p2p state locks
 peersLock = Lock() #lock for peers list
 messageLock = Lock() #lock for received message dict
 preInitialisedLock = Lock() #lock for pre-initialisation message queue
@@ -492,25 +462,29 @@ preInitialisedLock = Lock() #lock for pre-initialisation message queue
 deliverabilityLock = Lock() #lock for checking for message deliverability
 incrementLock = Lock() #lock for this peer to increment its own vector clock
 
-#initialisation complete event
+#************************************************************
+#events
+
+#shutdown event, flags that threads should close
+shutdownFlag = Event()
+
+#initialisation complete event, flags that cloning is complete and node is part of network
 initialisationComplete = Event()
 
-#flag for if peer was initialised with no connections
-#used to determine if a node should be allowed to clone it, despite it not being initialised
+#flags if a peer was initialised with no connections
+#used to determine if a node should be allowed to clone the peer if the peer is not initialised
 initiallyUnconnected = Event()
 
-#to be used in our vector clocks as the process identifier
-#e.g. [UUID-AAAAAA   1]
-#     [UUID-BBBBBB   2]
-#and so on
+#************************************************************
+#vector clock and causal message queue
 
-#TODO I AM CHANGING THIS TO IP TO MAKE IT EASIER TO INTERPRET THE DEMO
-processId = env['CLIENT_LISTEN_IP'] #str(uuid.uuid4()) 
-# This process's vector clock - initialised with its UUID/0 i.e 
-# [ [UUID-AAAAA0, 0] ]
+processId = env['CLIENT_LISTEN_IP']
+# This process's vector clock - initialised with its own ip i.e 
+# [ [127.0.0.XX, 0] ]
 processVectorClock = [[processId, 0]]
 processMessageQueue = []
-# Main 
+
+
 main()
 
 '''

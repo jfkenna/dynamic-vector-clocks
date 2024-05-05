@@ -1,17 +1,55 @@
+from dotenv import dotenv_values
+
 def validateEnv(env, requiredFields):
     for required in requiredFields:
         if required not in env:
-            print("Variable {0} is not specified in your dotenv (.env) file!".format(required))
+            print('Variable {0} is not specified in your dotenv (.env) file!'.format(required))
             return False 
         
     # Check if ports are in valid range
     if 'PROTOCOL_PORT' in env and (not 1 <= int(env['PROTOCOL_PORT']) <= 65535):
-        print("PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.".format(env['PROTOCOL_PORT']))
+        print('PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.'.format(env['PROTOCOL_PORT']))
         return False
     
     if 'REGISTRY_PROTOCOL_PORT' in env and (not 1 <= int(env['REGISTRY_PROTOCOL_PORT']) <= 65535):
-        print("REGISTRY_PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.".format(env['REGISTRY_PROTOCOL_PORT']))
+        print('REGISTRY_PROTOCOL_PORT is defined as {0}. Needs to be between 1-65535.'.format(env['REGISTRY_PROTOCOL_PORT']))
     return True
+
+
+def loadArgsAndEnvClient(argv):
+    #handle .env as global variable
+    #parse and validate, then call main()
+    env = dotenv_values('.env')
+    if not validateEnv(env, ['PROTOCOL_PORT', 'CLIENT_WORKER_THREADS', 'REGISTRY_PROTOCOL_PORT', 'ENABLE_PEER_SERVER', 'ENABLE_NETWORK_DELAY']):
+        print('.env failed validation, exiting...')
+        exit()
+
+    if len(argv) < 2:
+        print('You must provide the client\'s ip, exiting...')
+        exit()
+    env['CLIENT_LISTEN_IP'] = argv[1]
+
+    if int(env['ENABLE_PEER_SERVER']) == 1 and int(env['ENABLE_NETWORK_DELAY']) == 1:
+        print('ENABLE_PEER_SERVER and ENABLE_NETWORK_DELAY cannot be enabled at the same time')
+        print('exiting...')
+        exit()
+
+    if int(env['ENABLE_PEER_SERVER']) == 1:
+        if len(argv) < 3:
+            print('ENABLE_PEER_SERVER flag was set, but you did not provide the ip of a peer registry')
+            print('exiting...')
+            exit()
+        env['PEER_REGISTRY_IP'] = argv[2]
+    
+    if int(env['ENABLE_NETWORK_DELAY']) == 1:
+        if len(argv) < 3:
+            print('ENABLE_NETWORK_DELAY flag was set, but you did not provide an address to throttle')
+            print('exiting...')
+            exit()
+        env['THROTTLED_IP'] = argv[2]
+
+    return env
+ 
 
 '''
 Bibliography
