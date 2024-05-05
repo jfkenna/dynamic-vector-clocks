@@ -42,7 +42,8 @@ def sendWorker(outgoingMessageQueue, peers, processId):
             return
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
-        processVectorClock = incrementVectorClock(processVectorClock, processId)
+        with incrementLock:
+            processVectorClock = incrementVectorClock(processVectorClock, processId)
         outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
         broadcastToPeers(outgoingMessage, peers)
 
@@ -171,13 +172,14 @@ def handleMessage(message, receivedMessages, peers):
     broadcastToPeers(jsonMessage, peers)
     # If this processId is the sender of the message
     if not message['sender'] == processId:
-        if canDeliver(processVectorClock, message):
-            processVectorClock = deliverMessage(processVectorClock, message, processId)
-            textUpdateGUI(message['sender'], message['text'])
-        else:
-            processMessageQueue.append(message)
+        with deliverabilityLock:
+            if canDeliver(processVectorClock, message):
+                processVectorClock = deliverMessage(processVectorClock, message, processId)
+                textUpdateGUI(message['sender'], message['text'])
+            else:
+                processMessageQueue.append(message)
 
-        processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
+            processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
 
 
 def registerAndCompleteInitialisation():
@@ -388,6 +390,12 @@ messageLock = Lock()
 
 #global lock for pre-initialisation message queue
 preInitialisedLock = Lock()
+
+#global lock for checking for message deliverability
+deliverabilityLock = Lock()
+
+#global lock for this peer to increment its own vector clock
+incrementLock = Lock()
 
 #initialisation complete event
 initialisationComplete = Event()
