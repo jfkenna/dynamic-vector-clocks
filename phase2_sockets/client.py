@@ -28,22 +28,59 @@ from kivy.clock import Clock
 
 Builder.load_string('''
 
-<AlignedLabel>:
-    #halign: 'left'
-    text_size: self.width, None
-    markup: True
+<LabelContainer>:
+    orientation: 'vertical'
+    adaptive_height: True
+    
+    sender: 'sender'
+    msg: 'msg'
+    padding: "8dp"
+    height: messageComponent.height + senderComponent.height + 25
+    width: root.width
+
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                #ripping off the iMessage colours
+                rgba: (0,0.47,0.96,1) if root.sender == 'You' else (0.5,0.5,.5,1)
+            RoundedRectangle:
+                size: self.size
+                pos: self.pos
+                radius: [35, 20, 35, 0] if root.sender == 'You' else [20, 35, 0, 35]
+        Label:
+            id: senderComponent
+            padding: [25, 0, 0, 0] if root.sender == 'You' else [0,0,25,0]
+            text: root.sender
+            text_size: self.size
+            size_hint_y: None
+            halign: 'left' if root.sender == 'You' else 'right'
+            valign: 'top'
+            height: self.texture_size[1]
+            markup: True
+        Label:
+            id: messageComponent
+            padding: '8dp'
+            text: root.msg
+            text_size: self.width, None
+            size_hint_y: None
+            height: self.texture_size[1]
+            halign: 'left'
+            valign: 'top'
+            markup: True
 
 <Messages>:
-    viewclass: 'AlignedLabel'
+    viewclass: 'LabelContainer'
     bar_width: dp(5)
     size_hint: (1, 1)
     scroll_type: ["bars", "content"]
     RecycleBoxLayout:
         size_hint: (1, None)
         height: self.minimum_height
-        default_size_hint: 1, None
+        default_size_hint_x: 1
+        padding: [50, 0, 50, 0]
         orientation: 'vertical'
-        row_default_height: 60
+        key_size: '_size'
 
 <MainScreen>:
     BoxLayout:
@@ -67,7 +104,6 @@ Builder.load_string('''
                 text: 'Hello?'
                 color: (0,0,0,1)
         BoxLayout:
-            id: 'middle'
             orientation: 'horizontal'
             size_hint: (1, .75)
             canvas.before:
@@ -102,13 +138,18 @@ class Messages(RecycleView):
     def __init__(self, **kwargs):
         super(Messages, self).__init__(**kwargs)
         self.data = []
-    def addMessage(self, msg):
-        self.data.append({'text': msg})
 
+    def addMessage(self, sender, msg):
+        self.data.append({'sender': sender, 'msg': msg})
+
+
+class LabelContainer(BoxLayout):
+    def __init__(self, **kwargs):
+        super(LabelContainer, self).__init__(**kwargs)
 
 class AlignedLabel(Label):
     def __init__(self, **kwargs):
-        super(AlignedLabel, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
 class MainScreen(BoxLayout):
         def addMessage(self):
@@ -117,8 +158,7 @@ class MainScreen(BoxLayout):
             message = textbox.text
             outgoingMessageQueue.put(message)
             textbox.text = ''
-            styledMessage ='[color=023020][You]: [/color][color=000000]{0}[/color]'.format(message)
-            App.get_running_app().root.children[0].children[1].children[0].addMessage(styledMessage)
+            App.get_running_app().root.children[0].children[1].children[0].addMessage('You', message)
 
 class GUI(App):
            
@@ -269,9 +309,7 @@ def UIWorker(outgoingMessageQueue):
 #TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
 #OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
 def textUpdateGUI(sender, message):
-    #allow user to specify their own markdown in messages
-    styledMessage ='[color=800020][{0}]: [/color][color=000000]{1}[/color]'.format(sender, message)
-    Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(styledMessage), 0.001)
+    Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(sender, message), 0.001)
 
 def statusUpdateGUI(status):
     Clock.schedule_once(lambda dt: App.get_running_app().setStatusMessage(status), 0.001)
