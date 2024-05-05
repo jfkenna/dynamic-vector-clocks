@@ -1,4 +1,5 @@
 import struct
+import socket
 
 #All messages sent by the system follow the following format:
 #Each connection only sends a single message before closing, so there is no need to define separators
@@ -42,3 +43,22 @@ def readSingleMessage(connection):
         #return once entire message read
         if len(received) >= contentLength:
             return received
+
+def sendToSingleAdr(message, senderSocket, adr, port):
+    try:
+        senderSocket.connect((adr, port))
+    except socket.error:
+        print('Error connecting to adr: {0}'.format(socket.error))
+        return True
+    try:
+        sendWithHeaderAndEncoding(senderSocket, message)
+    except socket.error:
+        print('Error sending message to peer: {0}'.format(socket.error))
+        return True
+    return False
+
+def silentFailureClose(connection):
+    try:
+        connection.close()
+    except:
+        pass

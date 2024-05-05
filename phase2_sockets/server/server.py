@@ -7,13 +7,7 @@ from dotenv import dotenv_values
 from shared.validator import validateEnv
 from shared.server_message import RegistryMessageType, constructBasicMessage, constructPeerResponseMessage
 from shared.client_message import parseJsonMessage, messageToJson
-from shared.network import sendWithHeaderAndEncoding, readSingleMessage
-
-def silentFailureClose(connection):
-    try:
-        connection.close()
-    except:
-        pass
+from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose
 
 def acceptWorker(connectionQueue, serverSocket):
     while True:

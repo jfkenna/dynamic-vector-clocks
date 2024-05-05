@@ -6,204 +6,56 @@ from shared.validator import validateEnv
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
-from shared.network import sendWithHeaderAndEncoding, readSingleMessage
+from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose, sendToSingleAdr
+from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI
+from kivy.lang import Builder
+from kivy.app import App
 import socket
 import uuid
 import sys
 import time
-from kivy.app import App
-from kivy.uix.button import Button
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.scrollview import ScrollView
-from kivy.core.window import Window
-from kivy.uix.textinput import TextInput
-from kivy.uix.recycleview import RecycleView
-from kivy.lang import Builder
-from kivy.graphics import *
-from kivy.uix.label import Label
-from kivy.properties import ListProperty
-from kivy.uix.recycleboxlayout import RecycleBoxLayout
-from kivy.clock import Clock
-
-Builder.load_string('''
-
-<LabelContainer>:
-    orientation: 'vertical'
-    adaptive_height: True
-    
-    sender: 'sender'
-    msg: 'msg'
-    padding: "8dp"
-    height: messageComponent.height + senderComponent.height + 25
-    width: root.width
-
-    BoxLayout:
-        orientation: 'vertical'
-        canvas.before:
-            Color:
-                #ripping off the iMessage colours
-                rgba: (0,0.47,0.96,1) if root.sender == 'You' else (0.5,0.5,.5,1)
-            RoundedRectangle:
-                size: self.size
-                pos: self.pos
-                radius: [35, 20, 35, 0] if root.sender == 'You' else [20, 35, 0, 35]
-        Label:
-            id: senderComponent
-            padding: [25, 0, 0, 0] if root.sender == 'You' else [0,0,25,0]
-            text: root.sender
-            text_size: self.size
-            size_hint_y: None
-            halign: 'left' if root.sender == 'You' else 'right'
-            valign: 'top'
-            height: self.texture_size[1]
-            markup: True
-        Label:
-            id: messageComponent
-            padding: '8dp'
-            text: root.msg
-            text_size: self.width, None
-            size_hint_y: None
-            height: self.texture_size[1]
-            halign: 'left'
-            valign: 'top'
-            markup: True
-
-<Messages>:
-    viewclass: 'LabelContainer'
-    bar_width: dp(5)
-    size_hint: (1, 1)
-    scroll_type: ["bars", "content"]
-    RecycleBoxLayout:
-        size_hint: (1, None)
-        height: self.minimum_height
-        default_size_hint_x: 1
-        padding: [50, 0, 50, 0]
-        orientation: 'vertical'
-        key_size: '_size'
-
-<MainScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        canvas.before:
-            Color:
-                rgba: (1,1,1,1)
-            Rectangle:
-                size: self.size
-                pos: self.pos
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint: (1, .1)
-            canvas.before:
-                Color: 
-                    rgba: (1,1,1,1)
-                Rectangle:
-                    size: self.size
-                    pos: self.pos
-            Label:
-                text: 'Hello?'
-                color: (0,0,0,1)
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint: (1, .75)
-            canvas.before:
-                Color:
-                    rgba: (0.8,0.8,0.8,1)
-                Rectangle:
-                    size: self.size
-                    pos: self.pos
-            Messages
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint: (1, .15)
-            canvas.before:
-                Color:
-                    rgba: (1,1,1,1)
-                Rectangle:
-                    size: self.size
-                    pos: self.pos
-            TextInput:
-                text: ''
-                multiline: True
-                size_hint: (.8, 1)
-            Button:
-                text:'Send'
-                background_color: (0,0,1,1)
-                size_hint: (.2, 1)
-                on_release: root.addMessage()
-''')
-
-
-class Messages(RecycleView):
-    def __init__(self, **kwargs):
-        super(Messages, self).__init__(**kwargs)
-        self.data = []
-
-    def addMessage(self, sender, msg):
-        self.data.append({'sender': sender, 'msg': msg})
-
-
-class LabelContainer(BoxLayout):
-    def __init__(self, **kwargs):
-        super(LabelContainer, self).__init__(**kwargs)
-
-class AlignedLabel(Label):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-class MainScreen(BoxLayout):
-        def addMessage(self):
-            global outgoingMessageQueue
-            textbox = App.get_running_app().root.children[0].children[0].children[1]
-            message = textbox.text
-            outgoingMessageQueue.put(message)
-            textbox.text = ''
-            App.get_running_app().root.children[0].children[1].children[0].addMessage('You', message)
-
-class GUI(App):
-           
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def setStatusMessage(self, status):
-        print(App.get_running_app().root.children[0].children[2].children[0])
-        print("Attempting to set status")
-        App.get_running_app().root.children[0].children[2].children[0].text = status
-
-    def build(self):
-        return MainScreen()
-
-def silentFailureClose(connection):
-    try:
-        connection.close()
-    except:
-        pass
 
 def acceptWorker(connectionQueue, serverSocket):
     print('[a0] Started')
     while True:
+        print(shutdownFlag.is_set())
+        if shutdownFlag.is_set():
+            return
         connectionQueue.put(serverSocket.accept())
         #print('[a0] Accepted connection')
 
 
 def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
+
+    #TODO messy, but I still can't figure out how to pass in args when launching app
+    #it works with globals, but that makes client.py far too bloated
+    #pass in queue once GUI starts
     while True:
+        if App.get_running_app():
+            App.get_running_app().setQueue(outgoingMessageQueue)
+            break
+        time.sleep(0.005)
+    
+    #main loop
+    while True:
+        print("Hello?")
+        if shutdownFlag.is_set():
+            return
+        App.get_running_app().setQueue(outgoingMessageQueue)
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
         processVectorClock = incrementVectorClock(processVectorClock, processId)
         outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
         broadcastToPeers(outgoingMessage, peers)
 
-        #TODO remove
-        #just for test purposes
-        statusUpdateGUI('STATUS UPDATE SUCCESS!')
-
 def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, id):
     print('[w{0}] Started'.format(id))
     global processVectorClock
     global processMessageQueue
     while True:
+        if shutdownFlag.is_set():
+            return
         connection, adr = connectionQueue.get()
         try:
             #attempt to read a single message from the connection
@@ -278,8 +130,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
         #special handling for hello responses
         if message['type'] == MessageType.HELLO_RESPONSE:
 
-            print('GOT HELLO RESPONSE')
-
             #discard message if we have already cloned a process
             if initialisationComplete.is_set():
                 continue
@@ -297,22 +147,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
 
         #handle standard messages
         handleMessage(message, receivedMessages, peers)
-
-
-def UIWorker(outgoingMessageQueue):
-    print('===CHAT STARTED=======')
-    while True:
-        newMessageText = input()
-        outgoingMessageQueue.put(newMessageText)
-
-
-#TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
-#OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
-def textUpdateGUI(sender, message):
-    Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(sender, message), 0.001)
-
-def statusUpdateGUI(status):
-    Clock.schedule_once(lambda dt: App.get_running_app().setStatusMessage(status), 0.001)
 
 def handleMessage(message, receivedMessages, peers):
 
@@ -376,19 +210,6 @@ def buildSenderSocket():
     senderSocket.settimeout(0.25) #250 ms maximum timeout - allows reasonable amounts of network delay
     return senderSocket
 
-def sendToSingleAdr(message, senderSocket, adr, port):
-    try:
-        senderSocket.connect((adr, port))
-    except socket.error:
-        print('Error connecting to adr: {0}'.format(socket.error))
-        return True
-    try:
-        sendWithHeaderAndEncoding(senderSocket, message)
-    except socket.error:
-        print('Error sending message to peer: {0}'.format(socket.error))
-        return True
-    return False
-
 
 def broadcastToPeers(message, peers):
     failedCount = 0
@@ -405,9 +226,11 @@ def broadcastToPeers(message, peers):
         #TODO decide on error handling here
         #maybe try to get a new set of peers from the server, and if that also fails, close completely?
         print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
+        statusUpdateGUI('No peers were able to receive message. We may be disconnected from the network', True)
         return True
+    else:
+        clearStatusGUI()
     return False
-
 
 
 def getPeerHosts():
@@ -440,6 +263,9 @@ def sayHello(peers):
         registerAndCompleteInitialisation()
 
 def main():
+
+    #globally shared outgoing message queue
+    outgoingMessageQueue = Queue()
 
     #create shared resources
     #suprisingly, default python queue is thread-safe and blocks on .get()
@@ -530,14 +356,18 @@ def main():
     else:
         print('waiting for at least one other peer to establish connection...')
 
-    #don't start the input thread until hello completes
+    #don't start the GUI until hello completes
     while not initialisationComplete.is_set():
         time.sleep(0.1)
 
-    GUI().run()
+    #start GUI from template file
+    Builder.load_file('layout.kv')
+    GUI(title='CHAT CLIENT [{0}]'.format(env['CLIENT_LISTEN_IP'])).run()
 
-    #TODO
-    #should interrupt the threads before exiting...
+    #set exit flag once GUI terminates
+    #TODO get this actually working, right now it fails due to threads blocking (python has no thread interrupt method)
+    shutdownFlag.set()
+    acceptSocket.close()
 
 
 #handle .env as global variable
@@ -562,8 +392,8 @@ if (int(env['ENABLE_PEER_SERVER']) == 1):
 
 print('Combined env and argv config:', dict(env))
 
-#globally shared outgoing message queue
-outgoingMessageQueue = Queue()
+#shutdown event
+shutdownFlag = Event()
 
 #global lock for received message dict
 messageLock = Lock()
