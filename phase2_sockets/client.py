@@ -40,7 +40,6 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     while True:
         if shutdownFlag.is_set():
             return
-        App.get_running_app().setQueue(outgoingMessageQueue)
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
         processVectorClock = incrementVectorClock(processVectorClock, processId)

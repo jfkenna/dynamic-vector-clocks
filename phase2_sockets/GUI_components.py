@@ -57,7 +57,6 @@ class GUI(App):
         super().__init__(**kwargs)
         print(args)
         Window.bind(on_request_close=self.cleanup)
-        self.queue = None
     
     def cleanup(self, *args):
         App.stop(self)
