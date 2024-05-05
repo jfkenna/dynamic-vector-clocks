@@ -183,7 +183,7 @@ Other clients/peers that wish to connect to the network will need to be connecte
 
 Upon a client/peer starting - a local Kivy window will appear where they can enter in messages to other clients/peers. Sending/receiving messages works as expected - clients/peers that join the network will be included when they join - and can drop off when they so desire. Vector clocks are incremented on message send via a client/peer's `sendWorker` - and the receiving client/peers' `networkWorker` handles deliverability:
 
-![P2P Messaging App - Without a central peer registry server](/phase2_sockets/images/phase2-no-server.png)
+![P2P Messaging App - Without a central peer registry server](/phase2_sockets/images/phase2-no-server.png){width=50%}
 
 #### With a Peer Registration Server
 
@@ -252,7 +252,7 @@ waiting for at least one other peer to establish connection...
 
 Just like the previous implementation without the central peer registry server -  a local Kivy window will appear where it can enter in messages to other registered peers. Sending/receiving messages works as expected - client/peers that join the network will be included when they join - and can drop off when they so desire. Vector clocks are incremented on message send via a client/peer's `sendWorker` - and the receiving client/peers' `networkWorker` handles deliverability.
 
-![P2P Messaging App - With a central peer registry server](/phase2_sockets/images/phase2-with-central-server.png)
+![P2P Messaging App - With a central peer registry server](/phase2_sockets/images/phase2-with-central-server.png){width=80%}
 
 ## Presentation
 
