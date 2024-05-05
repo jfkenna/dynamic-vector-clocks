@@ -22,22 +22,20 @@ def sendWithHeaderAndEncoding(connection, message):
 
 
 #peer -> (connection, received buffer, current message length)
-def addNetworkReaderEntry(peer, connection, connectionDict):
-    networkEntry = {
+def buildNetworkEntry(connection):
+    return {
         'connection': connection,
         'contentLength': None,
         'buffer': b''
     }
-    connectionDict[peer] = networkEntry
 
 
-def continueRead(networkEntry):
+def continueRead(networkEntry, messageQueue):
     headerSize = struct.calcsize('!l')
     data = networkEntry['connection'].recvfrom(2048)
-    
-    #TODO handle early socket close
+
     if not data:
-        print('TODO HANDLE EARLY CLOSE')
+        return True
     
     networkEntry['buffer'] += data
     
@@ -52,27 +50,24 @@ def continueRead(networkEntry):
 
             #if haven't received enough data to know the message length, return
             else:
-                return
+                return False
 
         #read complete message and remove it from the buffer if possible
         if len(networkEntry['buffer']) >= networkEntry['contentLength']:
             message = networkEntry['buffer'][:networkEntry['contentLength']]
             networkEntry['buffer'] = networkEntry['buffer'][networkEntry['contentLength']:]
-            #handle message?
+
+            #associate message with sender
+            messageWithPeer = (peer, message)
+            messageQueue.put(messageWithPeer)
 
         #if no complete messages are present, return
         else:
-            return
+            return False
 
-
-def sendToSingleAdr(message, senderSocket, adr, port):
+def sendToSingleAdr(message, connectedSocket):
     try:
-        senderSocket.connect((adr, port))
-    except socket.error:
-        print('Error connecting to adr: {0}'.format(socket.error))
-        return True
-    try:
-        sendWithHeaderAndEncoding(senderSocket, message)
+        sendWithHeaderAndEncoding(connectedSocket, message)
     except socket.error:
         print('Error sending message to peer: {0}'.format(socket.error))
         return True

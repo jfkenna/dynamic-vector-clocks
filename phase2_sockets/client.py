@@ -6,7 +6,7 @@ from shared.validator import validateEnv
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
-from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose, sendToSingleAdr
+from shared.network import sendWithHeaderAndEncoding, continueRead, silentFailureClose, sendToSingleAdr
 from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI
 from kivy.lang import Builder
 from kivy.app import App
@@ -14,17 +14,41 @@ import socket
 import uuid
 import sys
 import time
+import selectors
 
-def acceptWorker(connectionQueue, serverSocket):
+def acceptWorker(serverSocket, messagesToHandle):
+
     print('[a0] Started')
     while True:
         print(shutdownFlag.is_set())
         if shutdownFlag.is_set():
             return
-        connectionQueue.put(serverSocket.accept())
+        
+        #TODO double check that network entry is always ready by the time messages are received
+        newConnection = serverSocket.accept()
+        newConnection.setblocking(False)
+        selector.register(newConnection, selectors.EVENT_READ, lambda readable: readCallback(readable, messagesToHandle))
+
+        with peersLock:
+            networkEntries[peer] = buildNetworkEntry(newConnection)
+            peers.append(peer)
 
 
-def sendWorker(outgoingMessageQueue, peers, processId):
+def readCallback(readableSocket, messagesToHandle):
+    peer = readableSocket.getpeername()[0] #TODO ERROR HANDLING FOR CASE WHERE SOCKET CLOSES
+
+    #skip dead entries TODO check if actually necessary
+    networkEntry = networkEntries.get(peer, None)
+    if networkEntry == None:
+        return
+
+    #read available messages, then 
+    continueRead(networkEntry, messagesToHandle)
+    select.register(readableSocket, selectors.EVENT_READ, readCallback)
+
+
+def broadcastWorker(outgoingMessageQueue, peers, processId):
+    global processVectorClock 
     print('[s0] Started')
 
     #pass in queue once GUI is ready for binding
@@ -34,119 +58,97 @@ def sendWorker(outgoingMessageQueue, peers, processId):
             break
         time.sleep(0.005)
     
-    #main loop
+    #once UI is setup, begin handling broadcasts
     while True:
         if shutdownFlag.is_set():
             return
-        outgoingMessageText = outgoingMessageQueue.get()
-        global processVectorClock 
-        with incrementLock:
-            processVectorClock = incrementVectorClock(processVectorClock, processId)
-        outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
+        receivedMessage = outgoingMessageQueue.get()
 
-        if broadcastToPeers(outgoingMessage, peers):
-            statusUpdateGUI('Last message failed to deliver to any peers - we may have been partitioned from the network.', True)
+        #if message originates from UI, hydrate with local clock
+        #otherwise, retransmit without changes
+        if len(receivedMessage['clock'].keys()):
+            with incrementLock:
+                processVectorClock = incrementVectorClock(processVectorClock, processId)
+                outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, receivedMessage['text'], processId))
+        else:
+            outgoingMessage = receivedMessage
+        broadcastToPeers(outgoingMessage, peers)
 
-def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, id):
-    print('[w{0}] Started'.format(id))
-    global processVectorClock
-    global processMessageQueue
+
+def handlerWorker(messagesToHandle, outgoingMessageQueue):
     while True:
-        if shutdownFlag.is_set():
-            return
-        connection, adr = connectionQueue.get()
-        try:
-            #attempt to read a single message from the connection
-            data = readSingleMessage(connection)
+        #TODO can put a timeout here, then check if flag for exit is set
+        messageInfo = messagesToHandle.get()
 
-            #socket closed before full message length was read
-            if data == None:
-                print('Error reading from socket - connection closed before full header length could be read')
-                silentFailureClose(connection)
-                continue
-
-        except socket.error:
-            print('Error reading from socket: {0}'.format(socket.error))
-            print('Closing the connection without attempting to read more')
-            silentFailureClose(connection)
+        message = parseJsonMessage(messageInfo[1], [], True)
+        #do nothing if connection crashes at some stage before message is handled
+        peerNetworkData = networkEntries.get(messageInfo[0], None)
+        if peerNetworkData == None:
             continue
-        
-        requestingPeer = connection.getpeername()[0]
-        silentFailureClose(connection)
-        message = parseJsonMessage(data, [], True)
 
+        if message['type'] == MessageType.HELLO:
+            handleHello(peerNetworkData, message)
+        if message['type'] == MessageType.HELLO_RESPONSE:
+            handleHelloResponse(peerNetworkData, message)
+        if message['type'] == MessageType.BROADCAST_MESSAGE:
+            handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue)
         if message == None:
             print('[w{0}] Parse error'.format(id))
             continue
 
-        #special handling for hello messages
-        if message['type'] == MessageType.HELLO:
+def handleHello(networkEntry, message):
+    #allow other nodes to initialise by cloning a node with no peers
+    #this allows the first connection to be made
+    #this scenario can only occur if the hostname of a node that was launched no connections is provided as peer
+    if (not initialisationComplete.is_set()) and (not initiallyUnconnected.is_set()):
+        print('A process attempted to clone this node before it was initialized')
+        return
+    
+    #case where we provide clone data as an unconnected, uninitialized peer
+    #TODO triple check there is no case where this can cause perma-wait issues
+    #in scenarios where 'HELLO' is broadcast to both a real peer that is sending messages, and an unconnected peer
+    if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
+        emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
+        #don't initialise if peer couldn't receive message
+        if sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
+            #TODO handle peer failure
+            print('Failed to send clone data to peer. Remaining unitialised')
+            return
+        silentFailureClose(senderSocket)
+        
+        #initialise after sending peer data
+        handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
+        registerAndCompleteInitialisation()
+        return
 
-            #allow other nodes to initialise by cloning a node with no peers
-            #this allows the first connection to be made
-            #this scenario can only occur if the hostname of a node that was launched no connections is provided as peer
-            if (not initialisationComplete.is_set()) and (not initiallyUnconnected.is_set()):
-                print('A process attempted to clone this node before it was initialized')
-                return
-            
-            #case where we provide clone data as an unconnected, uninitialized peer
-            #TODO triple check there is no case where this can cause perma-wait issues
-            #in scenarios where 'HELLO' is broadcast to both a real peer that is sending messages, and an unconnected peer
+    #TODO need to lock on vector clock and message queue here
+    #i think i'll just make a monitor class to simplify all these locks
+    #for now, don't even lock, just so basic functionality is present
+    helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
+    if sendToSingleAdr(helloResponse, networkEntry['connection']):
+        #TODO handle peer failure
+        print('Failed to send clone data to peer')
+        return
 
-            if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
-                emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
+def handleHelloResponse(networkEntry, message):
+    #discard message if we have already cloned a process
+    if initialisationComplete.is_set():
+        return
 
+    #join messages we captured prior to initialisation with the undelivered messages
+    #received from the cloned processes
+    with preInitialisedLock:
+        processVectorClock = message['clock']
+        clonedMessages = message['undeliveredMessages']
+        clonedMessages = clonedMessages + preInitialisedReceivedMessages
+        processMessageQueue = clonedMessages
+        handleMessageQueue(processVectorClock, processMessageQueue, None)
+        registerAndCompleteInitialisation()
+    
 
-                senderSocket = buildSenderSocket()
-                #don't initialise if peer couldn't receive message
-                if sendToSingleAdr(emptyHelloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT'])):
-                    print('Failed to send clone data to peer. Remaining unitialised')
-                    continue
-                silentFailureClose(senderSocket)
-                
-                #initialise after sending peer data
-                peers.append(requestingPeer) #TODO see comment below on need for lock on peers - very important to address
-                handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
-                registerAndCompleteInitialisation()
-                continue
-
-            #TODO need to lock on vector clock and message queue here
-            #i think i'll just make a monitor class to simplify all these locks
-            #for now, don't even lock, just so basic functionality is present
-            helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
-            senderSocket = buildSenderSocket()
-            sendToSingleAdr(helloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT']))
-            silentFailureClose(senderSocket)
-
-            #TODO I think a lock is required for the case where we are iterating over peers at the same time
-            #the new peer is added - we might not send one of the messages to the new peer, causing dropped messages
-            #so all sending should stop until we finish handling the 'HELLO' and adding the peer.
-            #also need to think about the case where messages are in process of being sent by another thread so are not in enqueued messages, but are also not sent to peer
-            peers.append(requestingPeer)
-            continue
-
-        #special handling for hello responses
-        if message['type'] == MessageType.HELLO_RESPONSE:
-
-            #discard message if we have already cloned a process
-            if initialisationComplete.is_set():
-                continue
-
-            #join messages we captured prior to initialisation with the undelivered messages
-            #received from the cloned processes
-            with preInitialisedLock:
-                processVectorClock = message['clock']
-                clonedMessages = message['undeliveredMessages']
-                clonedMessages = clonedMessages + preInitialisedReceivedMessages
-                processMessageQueue = clonedMessages
-                handleMessageQueue(processVectorClock, processMessageQueue, None)
-                registerAndCompleteInitialisation()
-            continue
-
-        #handle standard messages
-        handleMessage(message, receivedMessages, peers)
-
-def handleMessage(message, receivedMessages, peers):
+def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
+    global processVectorClock
+    global processMessageQueue
 
     with messageLock:
         if message['id'] in receivedMessages:
@@ -161,15 +163,9 @@ def handleMessage(message, receivedMessages, peers):
             preInitialisedReceivedMessages.append(message)
             return
 
-
-    global processVectorClock
-    global processMessageQueue
-
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     jsonMessage = messageToJson(message)
-    if broadcastToPeers(jsonMessage, peers):
-        statusUpdateGUI('Last message failed to deliver to any peers. There is a chance future messages may not be delivered.', True)
-
+    outgoingMessageQueue.put(jsonMessage)
 
     # If this processId is the sender of the message
     if not message['sender'] == processId:
@@ -193,7 +189,9 @@ def registerAndCompleteInitialisation():
 
         registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
         senderSocket = buildSenderSocket()
-        if sendToSingleAdr(registerMessage, senderSocket, serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])):
+
+        #TODO MAKE SENDER SOCKET ACTUALLY CONNECT TO THE SERVER, RN ITS JUST AN UNCONNECTED SOCKET
+        if sendToSingleAdr(registerMessage, senderSocket):
             print('Failed to register with registry server. Your peers will need to add you manually.')
     initialisationComplete.set()
 
@@ -206,20 +204,24 @@ def buildSenderSocket():
 
 
 def broadcastToPeers(message, peers):
-    failedCount = 0
     for peer in peers:
-        senderSocket = buildSenderSocket()
-        if sendToSingleAdr(message, senderSocket, peer, int(env['PROTOCOL_PORT'])):
-            failedCount += 1
-        silentFailureClose(senderSocket)
-    
-    if (failedCount == len(peers)):
-        print('Last message failed to deliver to any peers')
-        return True
+        peerConnection = networkEntries[peer]['connection']
+        if sendToSingleAdr(message, peerConnection):
+            handlePeerFailure(peer)
     else:
         clearStatusGUI()
-    return False
 
+
+def handlePeerFailure(peer):
+    with peersLock:
+        del networkEntries[peer]
+        peers.remove(peer)
+
+        #handle total failure case
+        #TOOD exit system
+        if len(peers) == 0:
+            print('Totally disconnected from network')
+    return
 
 def getPeerHosts():
     initialPeers = []
@@ -244,20 +246,24 @@ def getPeerHosts():
 
 def sayHello(peers):
     helloMessage = messageToJson(constructHello(processId))
-    if broadcastToPeers(helloMessage, peers):
-        print('Failed to send HELLO message to any of our peers. Registering and starting with an empty clock')
-        registerAndCompleteInitialisation()
+
+    #TODO check if any peers are alive
+    registerAndCompleteInitialisation()
 
 def main():
 
-    #represent connections. Each peer maps to dict containing --> (socket, socket lock, current message size, read bytes buffer)
+    #connections in the system. peer -> (socket, socket lock, current message size, read bytes buffer)
     networkEntries = {}
 
-    #globally shared outgoing message queue
+    #messages that have been read from a socket and need to be handled
+    #[(peer, message)]
+    messagesToHandle = Queue()
+
+    #messages that need to be broadcast
+    #[(message, isRetransmitting)]
     outgoingMessageQueue = Queue()
 
-    #create shared resources
-    #suprisingly, default python queue is thread-safe and blocks on .get()
+    #connections
     connectionQueue = Queue()
     
     #use with 'messageLock' to ensure mutex
@@ -284,7 +290,7 @@ def main():
         print('Retrieving peers from registry server...')
         getPeerMessage = messageToJson(constructBasicMessage(RegistryMessageType.GET_PEERS))
         senderSocket = buildSenderSocket()
-        if sendToSingleAdr(getPeerMessage, senderSocket, serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])):
+        if sendToSingleAdr(getPeerMessage, senderSocket):
             print('Failed to get peers from registry server')
             print('exiting...')
             exit()
@@ -307,16 +313,40 @@ def main():
             print('Registry responded with an invalid message')
             print('exiting...')
             exit()
-        peers = peerData['peers']
-        print('Received peers from registry: ', peers)
-        if (len(peers) == 0):
+        unconnectedPeers = peerData['peers']
+        print('Received peers from registry: ', unconnectedPeers)
+        if (len(unconnectedPeers) == 0):
             print('Registry had no peers, registering self')
             registerAndCompleteInitialisation()
     else:
-        peers = getPeerHosts()
-        if len(peers) == 0:
-            initiallyUnconnected.set()
+        unconnectedPeers = getPeerHosts()
     
+    #establish connections
+    peers = []
+    for peer in unconnectedPeers:
+        p2pSocket = buildSenderSocket()
+        try:
+            connection = p2pSocket.connect((peer, int(env['PROTOCOL_PORT'])))
+            networkEntries[peer] = buildNetworkEntry()
+            peers.append(peer)
+        except socket.error:
+            print('Could not establish connection for peer {0}'.format(peer))
+            print('Proceeding without it')
+
+    if len(peers) == 0:
+        print('STARTED WITH NO PEERS')
+        initiallyUnconnected.set()
+    
+    #create worker threads
+    broadcastWorkers = []
+    handlerWorkers = []
+    for i in range(int(env['CLIENT_WORKER_THREADS'])):
+        broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, peers, processId)))
+        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, outgoingMessageQueue)))
+    for i in range(int(env['CLIENT_WORKER_THREADS'])):
+        broadcastWorkers[i].start()
+        handlerWorkers[i].start()
+
     #setup listener
     #for now, only use ipv4 - can swap to V6 fairly easily later if we want to
     acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -324,19 +354,9 @@ def main():
     acceptSocket.listen()
     print('Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
     print("Process ID is", processId)
-    acceptThread = Thread(target=acceptWorker, args=(connectionQueue, acceptSocket, ))
+    acceptThread = Thread(target=acceptWorker, args=(acceptSocket, messagesToHandle))
     acceptThread.start()
 
-    #message handler threads
-    handlerThreads = []
-    for i in range(0, int(env['CLIENT_WORKER_THREADS'])):
-        worker = Thread(target=networkWorker, args=(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, i, ))
-        handlerThreads.append(worker)
-        worker.start()
-
-    #thread for self-initiated messages
-    sendThread = Thread(target=sendWorker, args=(outgoingMessageQueue, peers, processId))
-    sendThread.start()
 
     #clone state of some other node in the network as own initial state
     if len(peers) > 0:
@@ -380,6 +400,9 @@ if (int(env['ENABLE_PEER_SERVER']) == 1):
     env['PEER_REGISTRY_IP'] = sys.argv[2]
 
 print('Combined env and argv config:', dict(env))
+
+#selector over sockets
+selectors.DefaultSelector() 
 
 #shutdown event
 shutdownFlag = Event()

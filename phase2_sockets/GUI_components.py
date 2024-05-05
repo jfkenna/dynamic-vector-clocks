@@ -10,6 +10,7 @@ from kivy.properties import ListProperty
 from kivy.uix.recycleboxlayout import RecycleBoxLayout
 from kivy.clock import Clock
 from kivy.core.window import Window
+from shared.client_message import constructMessage
 
 class Messages(RecycleView):
     def __init__(self, **kwargs):
@@ -45,7 +46,9 @@ class MainScreen(BoxLayout):
             message = textbox.text
 
             #dispatch to queue
-            App.get_running_app().dispatchToQueue(message)
+            #message will be hydrated with clock by the broadcast handler
+            partiallyCompleteMessage = constructMessage(MessageType.BROADCAST_MESSAGE, {}, message, sender)
+            App.get_running_app().dispatchToQueue(partiallyCompleteMessage)
 
             #update UI
             textbox.text = ''
