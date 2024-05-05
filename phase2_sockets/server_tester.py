@@ -1,11 +1,8 @@
 from random import randint, choice
 import sys
 from dotenv import dotenv_values
-import string
 import socket
 from threading import Thread
-import time
-import uuid
 from shared.client_message import messageToJson, parseJsonMessage
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.network import sendWithHeaderAndEncoding

@@ -3,7 +3,6 @@ from dotenv import dotenv_values
 import string
 import socket
 from threading import Thread
-import time
 import uuid
 from shared.client_message import constructMessage, MessageType, messageToJson
 from shared.network import sendWithHeaderAndEncoding
