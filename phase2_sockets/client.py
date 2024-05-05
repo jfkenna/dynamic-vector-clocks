@@ -1,5 +1,5 @@
 from threading import Thread, Lock, Event
-from queue import Queue
+from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 from shared.env_handler import loadArgsAndEnvClient
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
@@ -18,11 +18,15 @@ import copy
 
 def acceptWorker(serverSocket, peers):
     print('[a0] Started')
+    serverSocket.settimeout(0.1)
     while True:
         if shutdownFlag.is_set():
             return
+        try:
+            newConnection, adr = serverSocket.accept()
+        except socket.timeout:
+            continue
         
-        newConnection, adr = serverSocket.accept()
         ip = adr[0]
         newConnection.setblocking(False)
         
@@ -34,11 +38,19 @@ def acceptWorker(serverSocket, peers):
 
 def readWorker(messagesToHandle, peers):
     while True:
-        #https://docs.python.org/3/library/selectors.html
-        for key, mask in selector.select():
-            readableSocket = key.fileobj
+        if shutdownFlag.is_set():
+            return
+        selectResult = selector.select(timeout=0.1)
+        if selectResult == []:
+            continue
 
-             #avoid crash if socket has already closed
+        #https://docs.python.org/3/library/selectors.html
+        for key, mask in selectResult:
+            if shutdownFlag.is_set():
+                return
+            
+            readableSocket = key.fileobj
+            #avoid crash if socket has already closed
             try:
                 peer = readableSocket.getpeername()[0]
             except socket.error:
@@ -74,9 +86,11 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
     while True:
         if shutdownFlag.is_set():
             return
-
-        receivedMessage = outgoingMessageQueue.get()
-
+        try:
+            receivedMessage = outgoingMessageQueue.get(timeout=0.1)
+        except Empty:
+            continue
+        
 
         #ugly, but fix if we have time TODO
         parsedMessage = parseJsonMessage(receivedMessage, [], False)
@@ -97,8 +111,12 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
 
 def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
     while True:
-        #TODO can put a timeout here, then check if flag for exit is set
-        messageInfo = messagesToHandle.get()
+        if shutdownFlag.is_set():
+            return
+        try:
+            messageInfo = messagesToHandle.get(timeout=0.1)
+        except Empty:
+            continue
 
         message = parseJsonMessage(messageInfo[1], [], True)
         if message == None:
@@ -170,7 +188,7 @@ def handleHello(networkEntry, message):
     #case where we provide clone data as an initialised node in the network
     with incrementLock:
         helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
-        
+
     with networkEntry['lock']:
         if sendToSingleAdr(helloResponse, networkEntry['connection']):
             handlePeerFailure(peer, peers)
@@ -434,8 +452,21 @@ def main():
     Builder.load_file('layout.kv')
     GUI(title='CHAT CLIENT [{0}]'.format(env['CLIENT_LISTEN_IP'])).run()
 
+    print('GUI closed, terminating threads...')
     shutdownFlag.set()
-    acceptSocket.close()
+    for worker in broadcastWorkers:
+        worker.join()
+    print('joined broadcasters...')
+    for worker in readWorkers:
+        worker.join()
+    print('joined readers...')
+    for worker in handlerWorkers:
+        worker.join()
+    print('joined handlers...')
+    acceptThread.join()
+    silentFailureClose(acceptSocket)
+    print('all threads closed... exiting...')
+    
 
 
 #************************************************************
