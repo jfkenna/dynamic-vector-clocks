@@ -96,9 +96,11 @@ Number Sum:	 20.086
 
 ### Approach
 
-The second phase of this project takes forward the Dynamic Vector Clock Algorithm using the MPI implementation from Phase 1 as heavy inspiration - with **sockets** as the basis of integration in Python within a OS's terminal.
+The second phase of this project takes forward the Dynamic Vector Clock Algorithm using the MPI implementation from Phase 1 as the basis, now using **sockets** as the main means of integration in Python - with a Graphical User Interface (GUI) for 
 
-Unlinke the known quantity and expected send/receives of processes in the first phase, the invocation of this approach is more true to life and expected in multi-tenant chat applications that are seen in many social media sites and phone/tablet apps of the modern age. It's part and parcel that users expect to join in on a chat room with an unbound number of "peers" - whether its just a 1:1 conversation, or a room with more than 1000 people in it - the expectation of ordered messaging between all involved is key to a functional experience achieving the underlying causal delivery guarantee of messages.
+Unlinke the known quantity and expected send/receives of processes in the first phase, the invocation of this approach is more true to life and expected in multi-tenant chat applications that are seen in many social media sites and applications of the modern technological society. It's part and parcel that users expect to join in on a chat room with an unbound ceiling of "peers" - whether its just a 1:1 conversation, or a room with more than 1000 people in it - the expectation of ordered messaging between all involved is key to a functional experience achieving the underlying causal delivery guarantee of messages.
+
+True to causality - if there's a network partition at one of the peers - or perhaps that peer itself is under heavy load; it _may_ receive messages out-of-order akin to the examples shown in Phase 1. The DVC algorithm integrated with this part of our project will ensure that 
 
 ### Implementation
 
