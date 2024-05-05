@@ -1,5 +1,4 @@
 import socket
-import uuid
 import sys
 from threading import Thread, Lock
 from queue import Queue
