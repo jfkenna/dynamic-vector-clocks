@@ -163,7 +163,7 @@ def handleHello(networkEntry, message):
             return
         
         #initialise after sending peer data
-        handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
+        handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI) #TODO double check if necessary for this empty case
         registerAndCompleteInitialisation()
         return
 
@@ -215,12 +215,11 @@ def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
     if not message['sender'] == processId:
         with deliverabilityLock:
             if canDeliver(processVectorClock, message):
-                processVectorClock = deliverMessage(processVectorClock, message, processId)
-                textUpdateGUI(message['sender'], message['text'])
+                processVectorClock = deliverMessage(processVectorClock, message, processId, textUpdateGUI)
             else:
                 processMessageQueue.append(message)
 
-            processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
+            processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message, textUpdateGUI)
 
 
 def registerAndCompleteInitialisation():
@@ -484,20 +483,14 @@ selector = selectors.DefaultSelector()
 #shutdown event
 shutdownFlag = Event()
 
-#global lock for peers list
-peersLock = Lock()
+#locks
+peersLock = Lock() #lock for peers list
+messageLock = Lock() #lock for received message dict
+preInitialisedLock = Lock() #lock for pre-initialisation message queue
 
-#global lock for received message dict
-messageLock = Lock()
-
-#global lock for pre-initialisation message queue
-preInitialisedLock = Lock()
-
-#global lock for checking for message deliverability
-deliverabilityLock = Lock()
-
-#global lock for this peer to increment its own vector clock
-incrementLock = Lock()
+#vector clock locks
+deliverabilityLock = Lock() #lock for checking for message deliverability
+incrementLock = Lock() #lock for this peer to increment its own vector clock
 
 #initialisation complete event
 initialisationComplete = Event()
