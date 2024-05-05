@@ -44,13 +44,11 @@ def readWorker(messagesToHandle, peers):
             except socket.error:
                 continue
 
-            #skip dead entries TODO check if actually necessary
             networkEntry = networkEntries.get(peer, None)
             if networkEntry == None:
                 continue
 
-            #read available messages 
-            #TODO also lock writes
+            #read available messages
             with networkEntry['lock']:
                 readfailed = continueRead(networkEntry, messagesToHandle)
             if readfailed:
@@ -119,7 +117,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
                     if messageInfo[2] == False:
                         print('Delaying delivery of message: {0}'.format(message))
                         def delayedDeliveryCallback(messageInfo, messagesToHandle):
-                            time.sleep(5) #TODO USE ENV
+                            time.sleep(int(env['MOCK_NETWORK_DELAY']))
                             messagesToHandle.put((messageInfo[0], messageInfo[1], True))
                         delayedDeliveryThread = Thread(target=delayedDeliveryCallback, args=(messageInfo, messagesToHandle,))
                         delayedDeliveryThread.start()
@@ -146,30 +144,38 @@ def handleHello(networkEntry, message):
         print('A process attempted to clone this node before it was initialized')
         return
     
-    #case where we provide clone data as an unconnected, uninitialized peer
-    #TODO triple check there is no case where this can cause perma-wait issues
-    #in scenarios where 'HELLO' is broadcast to both a real peer that is sending messages, and an unconnected peer
-    if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
+    try:
+        if networkEntry['connection'] == None:
+            return
+        peer = networkEntry['connection'].getpeername()[0]
+    except socket.error:
+        peer = None
 
+    #case where we provide clone data as an unconnected, uninitialized peer
+    if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
         with incrementLock:
             emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
-        #don't initialise if peer couldn't receive message
-        if networkEntry['connection'] == None or sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
-            #TODO handle peer failure
-            print('Failed to send clone data to peer. Remaining unitialised')
-            return
+        
+        with networkEntry['lock']:
+            if sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
+                handlePeerFailure(peer, peers)
+                print('Failed to send clone data to peer. Remaining unitialised')
+                return
         
         #initialise after sending peer data
         handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI) #TODO double check if necessary for this empty case
         registerAndCompleteInitialisation()
         return
 
+    #case where we provide clone data as an initialised node in the network
     with incrementLock:
         helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
-    if networkEntry['connection'] == None or sendToSingleAdr(helloResponse, networkEntry['connection']):
-        #TODO handle peer failure
-        print('Failed to send clone data to peer')
-        return
+        
+    with networkEntry['lock']:
+        if sendToSingleAdr(helloResponse, networkEntry['connection']):
+            handlePeerFailure(peer, peers)
+            print('Failed to send clone data to peer')
+            return
 
 def handleHelloResponse(networkEntry, message):
     #discard message if we have already cloned a process
