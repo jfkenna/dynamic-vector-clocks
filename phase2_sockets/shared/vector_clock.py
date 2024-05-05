@@ -93,7 +93,7 @@ def handleMessageQueue(processVectorClock, queue, message):
             else:
                 queuedMessage = queue[iterator]                             # Grab the next message
                 if canDeliver(currentVectorClock, queuedMessage):           # Can the message be delivered?
-                    currentVectorClock = deliverMessage(currentVectorClock, queuedMessage)     # Deliver the message if it can be delivered
+                    currentVectorClock = deliverMessage(currentVectorClock, queuedMessage, message['sender'])     # Deliver the message if it can be delivered
                     queue.pop(iterator)                                     # Pop the message from the queue
                     iterator = 0                                            # Reset iterator to 0
                     firstPass = False                                       # Not the first pass anymore

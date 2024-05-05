@@ -3,7 +3,6 @@ import socket
 from threading import Lock
 
 #All messages sent by the system follow the following format:
-#Each connection only sends a single message before closing, so there is no need to define separators
 
 #|SIZE                           |TYPE                                |DESCRIPTION
 #|4 bytes (platform independent) |Fixed width big-endian encoded long |Represents length of message content in bytes
@@ -60,8 +59,7 @@ def continueRead(networkEntry, messageQueue):
             networkEntry['contentLength'] = None
 
             #associate message with sender
-            print("Got message", message)
-            messageWithPeer = (networkEntry, message)
+            messageWithPeer = (networkEntry, message, False)
             messageQueue.put(messageWithPeer)
 
         #if no complete messages are present, return
@@ -70,7 +68,6 @@ def continueRead(networkEntry, messageQueue):
 
 def sendToSingleAdr(message, connectedSocket):
     try:
-        print("Try send {0} to {1}".format(message, connectedSocket))
         sendWithHeaderAndEncoding(connectedSocket, message)
     except socket.error:
         print('Error sending message to peer: {0}'.format(socket.error))
