@@ -22,7 +22,6 @@ def acceptWorker(connectionQueue, serverSocket):
         if shutdownFlag.is_set():
             return
         connectionQueue.put(serverSocket.accept())
-        #print('[a0] Accepted connection')
 
 
 def sendWorker(outgoingMessageQueue, peers, processId):
@@ -39,7 +38,6 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     
     #main loop
     while True:
-        print("Hello?")
         if shutdownFlag.is_set():
             return
         App.get_running_app().setQueue(outgoingMessageQueue)
@@ -169,18 +167,12 @@ def handleMessage(message, receivedMessages, peers):
     global processVectorClock
     global processMessageQueue
 
-    
-    #print("Sender:",message["sender"])
-    #print("Receiver:",processId)
-    #print(processVectorClock)
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     jsonMessage = messageToJson(message)
     broadcastToPeers(jsonMessage, peers)
     # If this processId is the sender of the message
     if not message['sender'] == processId:
-        #print("Deliver/update the VC of the receiver if causality met?")
         if canDeliver(processVectorClock, message):
-            #print("initial process VC", processVectorClock)
             processVectorClock = deliverMessage(processVectorClock, message, processId)
             textUpdateGUI(message['sender'], message['text'])
         else:
@@ -214,13 +206,10 @@ def buildSenderSocket():
 def broadcastToPeers(message, peers):
     failedCount = 0
     for peer in peers:
-        #print("Broadcasting to peer {0}".format(peer))
-        #print("trying with peer {0}".format(peer))
         senderSocket = buildSenderSocket()
         if sendToSingleAdr(message, senderSocket, peer, int(env['PROTOCOL_PORT'])):
             failedCount += 1
         silentFailureClose(senderSocket)
-        #print('broadcast {0} to {1}'.format(message, peer))
     
     if (failedCount == len(peers)):
         #TODO decide on error handling here
