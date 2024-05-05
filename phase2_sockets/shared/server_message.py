@@ -1,6 +1,7 @@
 from enum import IntEnum
 import uuid
 
+#message types for client-server communication
 class RegistryMessageType(IntEnum):
     GET_PEERS = 0
     REGISTER_PEER = 1
@@ -9,6 +10,8 @@ class RegistryMessageType(IntEnum):
     OK = 4
     BAD_MESSAGE = 5
 
+#************************************************************
+#message constructors
 def constructBasicMessage(messageType):
     messageId = str(uuid.uuid4())
     return {

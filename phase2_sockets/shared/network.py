@@ -2,35 +2,37 @@ import struct
 import socket
 from threading import Lock
 
+
+#************************************************************
+#messages
+
 #All messages sent by the system follow the following format:
 
 #|SIZE                           |TYPE                                |DESCRIPTION
 #|4 bytes (platform independent) |Fixed width big-endian encoded long |Represents length of message content in bytes
 #|variable length                |utf-8 encoded byte string           |Message content
 
-
+#attaches a fixed width size header to start of message 
 def prependContentLengthHeader(encodedMessage):
     contentLength = len(encodedMessage)
-    #append fixed-width standardized long to start of message
+    #preprend fixed-width standardized long to message
     fixedWidthHeader = struct.pack('!l', contentLength)
     return fixedWidthHeader + encodedMessage
 
+
+#encodes message using utf-8, then attaches header
 def sendWithHeaderAndEncoding(connection, message):
     encoded = message.encode('utf-8')
     withHeader = prependContentLengthHeader(encoded)
     return connection.send(withHeader)
 
 
-#peer -> (connection, received buffer, current message length)
-def buildNetworkEntry(connection):
-    return {
-        'connection': connection,
-        'contentLength': None,
-        'buffer': b'',
-        'lock': Lock()
-    }
 
+#************************************************************
+#network IO helpers
 
+#reads a fixed block of data from a peer's connection and adds any complete messages to the message queue
+#not guaranteed to read a complete message - may need multiple invocations to build up the full message
 def continueRead(networkEntry, messageQueue):
     headerSize = struct.calcsize('!l')
     data = networkEntry['connection'].recv(2048)
@@ -66,6 +68,8 @@ def continueRead(networkEntry, messageQueue):
         else:
             return False
 
+
+#helper for sending a single message to a single socket
 def sendToSingleAdr(message, connectedSocket):
     try:
         sendWithHeaderAndEncoding(connectedSocket, message)
@@ -74,11 +78,27 @@ def sendToSingleAdr(message, connectedSocket):
         return True
     return False
 
+
+#helper for closing connections
+#suppresses error messages from double-closes
 def silentFailureClose(connection):
     try:
         connection.close()
     except:
         pass
+
+
+#builds dictionary representing a p2p network connection. Contains:
+#a socket and its associated lock
+#the current data that has been read from the socket
+#the header-indicated length of the current message
+def buildNetworkEntry(connection):
+    return {
+        'connection': connection,
+        'contentLength': None,
+        'buffer': b'',
+        'lock': Lock()
+    }
         
 '''
 Bibliography

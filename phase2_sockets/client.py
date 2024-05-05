@@ -1,7 +1,7 @@
 from threading import Thread, Lock, Event
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
-from shared.env_handler import loadArgsAndEnvClient
+from shared.env_handler import loadArgsAndEnvClient, getPeerNames
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
@@ -17,6 +17,8 @@ import selectors
 import copy
 
 #************************************************************
+#Worker threads
+
 #worker thread for accepting incoming connections
 #creates new network entries representing the connection
 def acceptWorker(serverSocket, peers):
@@ -40,7 +42,6 @@ def acceptWorker(serverSocket, peers):
         selector.register(newConnection, selectors.EVENT_READ, None)
 
 
-#************************************************************
 #worker thread for reading messages from connected sockets
 #will read from any socket with available bytes to read
 def readWorker(messagesToHandle, peers):
@@ -74,7 +75,6 @@ def readWorker(messagesToHandle, peers):
                 handlePeerFailure(peer, peers)
                 
 
-#************************************************************
 #worker thread for broadcasting enqueued messages
 #used for sending own messages, and for rebroadcasting messages from other peers
 def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
@@ -118,7 +118,6 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
         broadcastToPeers(outgoingMessage, peers)
 
 
-#************************************************************
 #worker thread for controlling message flow and responding to HELLO/HELLO_RESPONSE messages
 #passes off rebroadcast tasks to the broadcast worker
 def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
@@ -166,8 +165,9 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
             print('[w{0}] Parse error'.format(id))
             continue
 
-
 #************************************************************
+#Message handlers
+
 #reply to hello messages with copy of own state
 def handleHello(networkEntry, message):
     #allow other nodes to initialise by cloning a node with no peers
@@ -211,7 +211,6 @@ def handleHello(networkEntry, message):
             return
 
 
-#************************************************************
 #consume hello response to build initial peer state
 #once complete, process is an exact clone of another peer's previous state
 def handleHelloResponse(networkEntry, message):
@@ -230,7 +229,6 @@ def handleHelloResponse(networkEntry, message):
         registerAndCompleteInitialisation()
     
 
-#************************************************************
 #handle broadcast messages received from other processes
 #vector clock ensures causal delviery of received broadcasts
 def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
@@ -266,30 +264,10 @@ def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
             processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message, textUpdateGUI)
 
 
-
 #************************************************************
-#completes peer setup by
-#1. registering with the peer server if it's enabled
-#2. flagging that peer initialisation is complete
-def registerAndCompleteInitialisation():
-    if int(env['ENABLE_PEER_SERVER']) == 1:
-        try:
-            serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
-        except:
-            print('Registration failed due to issues resolving the registry server hostname')
-            print('Your peers will need to add you manually.')
+#Network / communication helpers
 
-        registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
-        senderSocket = buildSenderSocket()
-
-        #TODO MAKE SENDER SOCKET ACTUALLY CONNECT TO THE SERVER, RN ITS JUST AN UNCONNECTED SOCKET
-        if sendToSingleAdr(registerMessage, senderSocket):
-            print('Failed to register with registry server. Your peers will need to add you manually.')
-    initialisationComplete.set()
-
-
-#************************************************************
-#helper, constructs socket for establishing initial connection to another peer
+#constructs socket for establishing initial connection to another peer
 def buildSenderSocket():
     senderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     senderSocket.bind((env['CLIENT_LISTEN_IP'], 0)) #bind to specific sender adr so we can receive replies
@@ -297,8 +275,7 @@ def buildSenderSocket():
     return senderSocket
 
 
-#************************************************************
-#helper, sends a single message to all peers
+#sends a single message to all peers
 def broadcastToPeers(message, peers):
 
     #clone peer list so that multiple workers to broadcast different messages
@@ -317,8 +294,6 @@ def broadcastToPeers(message, peers):
         if sendFailed:
             handlePeerFailure(peer, peers)
 
-
-#************************************************************
 #helper, used to update peer list and network info when a peer's connection fails
 #if peers fall to 0, triggers the display of a warning message
 def handlePeerFailure(peer, peers):
@@ -343,57 +318,53 @@ def handlePeerFailure(peer, peers):
 
 
 #************************************************************
-#helper for updating peer list and network info when a connection fails
-#if the number of connected peers falls to 0, triggers the display of a warning message
-def getPeerHosts():
-    initialPeers = []
-    print("Enter peer IPs/hostnames [enter \'finished\' or \'f\' to continue]")
-    while True:
-        peer = input('Enter hostname: ')
-        if peer == 'finished' or peer == 'f':
-            if (len(initialPeers) == 0):
-                confirm = input('Confirm that you intend to start peer unconnected [Y to confirm, or anything else to cancel]...')
-                if confirm == 'Y':
-                    return initialPeers
-                continue
-            return initialPeers
+#Setup helpers
+
+#completes peer setup by
+#1. registering with the peer server if it's enabled
+#2. flagging that peer initialisation is complete
+def registerAndCompleteInitialisation():
+    if int(env['ENABLE_PEER_SERVER']) == 1:
         try:
-            resolvedAdr = socket.gethostbyname(peer)
-            initialPeers.append(resolvedAdr)
-            print('Added peer at {0}'.format(resolvedAdr))
+            serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
         except:
-            print('Couldn\'t resolve hostname, enter a different value')
-            continue
+            print('Registration failed due to issues resolving the registry server hostname')
+            print('Your peers will need to add you manually.')
+
+        registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
+        senderSocket = buildSenderSocket()
+
+        #TODO MAKE SENDER SOCKET ACTUALLY CONNECT TO THE SERVER, RN ITS JUST AN UNCONNECTED SOCKET
+        if sendToSingleAdr(registerMessage, senderSocket):
+            print('Failed to register with registry server. Your peers will need to add you manually.')
+    initialisationComplete.set()
 
 
-#************************************************************
 #helper, enqueues the node's initial HELLO message
 def sayHello(peers, outgoingMessageQueue):
     helloMessage = messageToJson(constructHello(processId))
     outgoingMessageQueue.put(helloMessage)
     registerAndCompleteInitialisation() #TODO - STOP INITIALISATION UNTIL HELLO COMPLETES
 
+
+#************************************************************
+#App
 def main():
 
     #messages that have been read from a socket and need to be handled
-    #hasAlreadyBeenHeldBack element is only used for simulating network delay
+    #hasAlreadyBeenHeldBack is only used for simulating network delay
     #[(networkEntry, message, hasAlreadyBeenHeldBack)]
     messagesToHandle = Queue()
 
     #messages that need to be broadcast
     #[(message, isRetransmitting)]
     outgoingMessageQueue = Queue()
-
-    #connections
-    connectionQueue = Queue()
     
-    #use with 'messageLock' to ensure mutex
+    #message ids that we've already received
     receivedMessages = {}
 
-    #room for extension - add new peers at runtime based on received messages, so network is more fault tolerant
-    #not added for this project, as this is just a demonstration of our vector clocks and causal delivery
-
     #get peers from peer server or command line based on params
+    #room for extension - add new peers at runtime based on received messages, so network is more fault tolerant
     if int(env['ENABLE_PEER_SERVER']) == 1:
         try:
             serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
@@ -434,7 +405,7 @@ def main():
             print('Registry had no peers, registering self')
             registerAndCompleteInitialisation()
     else:
-        unconnectedPeers = getPeerHosts()
+        unconnectedPeers = getPeerNames()
     
     #establish connections
     peers = []
@@ -522,7 +493,7 @@ print('Combined env and argv config:', dict(env))
 networkEntries = {}
 
 #initial message collector, stores edge case messages that arrive before HELLO_RESPONSE arrives
-preInitialisedReceivedMessages = [] #use with 'preInitialisedLock' to ensure mutex
+preInitialisedReceivedMessages = []
 
 #read socket selector
 selector = selectors.DefaultSelector()

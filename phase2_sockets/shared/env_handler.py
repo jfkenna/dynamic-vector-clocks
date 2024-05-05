@@ -1,4 +1,5 @@
 from dotenv import dotenv_values
+import socket
 
 def validateEnv(env, requiredFields):
     for required in requiredFields:
@@ -50,6 +51,28 @@ def loadArgsAndEnvClient(argv):
 
     return env
  
+
+#prompts user to manually enter a list of peers
+#returns all peers whose hostname could be resolved
+def getPeerNames():
+    initialPeers = []
+    print("Enter peer IPs/hostnames [enter \'finished\' or \'f\' to continue]")
+    while True:
+        peer = input('Enter hostname: ')
+        if peer == 'finished' or peer == 'f':
+            if (len(initialPeers) == 0):
+                confirm = input('Confirm that you intend to start peer unconnected [Y to confirm, or anything else to cancel]...')
+                if confirm == 'Y':
+                    return initialPeers
+                continue
+            return initialPeers
+        try:
+            resolvedAdr = socket.gethostbyname(peer)
+            initialPeers.append(resolvedAdr)
+            print('Added peer at {0}'.format(resolvedAdr))
+        except:
+            print('Couldn\'t resolve hostname, enter a different value')
+            continue
 
 '''
 Bibliography

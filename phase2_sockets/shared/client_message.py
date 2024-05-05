@@ -3,46 +3,22 @@ import json
 import copy
 import uuid
 
+#message types for p2p communication
 class MessageType(IntEnum):
     BROADCAST_MESSAGE = 0
     HELLO = 1
     HELLO_RESPONSE = 2
     LEAVE_NETWORK = 3
 
+#************************************************************
+#message helpers
+
+#returns json encoded copy of message
 def messageToJson(message):
     return json.dumps(message)
 
-def constructHello(sender):
-    messageId = str(uuid.uuid4())
-    return {
-        'id': messageId,
-        'sender': sender,
-        'type': MessageType.HELLO
-    }
-
-def constructHelloResponse(sender, clock, undeliveredMessages):
-    messageId = str(uuid.uuid4())
-    return {
-        'id': messageId,
-        'sender': sender,
-        'type': MessageType.HELLO_RESPONSE,
-        'clock': clock,
-        'undeliveredMessages': undeliveredMessages
-    }
-
-
-def constructMessage(messageType, clock, message, sender):
-    messageId = str(uuid.uuid4())
-    return {
-        'type': messageType,
-        'clock': clock or {},
-        'text': message,
-        'sender': sender,
-        'id': messageId
-    }
-
-#return dictionary containing message values
-#or None if parse failed
+#parses message and returns dictionary representing message content
+#returns none if parse failed
 def parseJsonMessage(message, requiredFields, useClientDefaults = False):
     try:
         parsedMessage = json.loads(message)
@@ -68,6 +44,42 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
                 return None
 
     return parsedMessage
+
+
+#************************************************************
+#message constructors
+
+def constructHello(sender):
+    messageId = str(uuid.uuid4())
+    return {
+        'id': messageId,
+        'sender': sender,
+        'type': MessageType.HELLO
+    }
+
+
+def constructHelloResponse(sender, clock, undeliveredMessages):
+    messageId = str(uuid.uuid4())
+    return {
+        'id': messageId,
+        'sender': sender,
+        'type': MessageType.HELLO_RESPONSE,
+        'clock': clock,
+        'undeliveredMessages': undeliveredMessages
+    }
+
+
+def constructMessage(messageType, clock, message, sender):
+    messageId = str(uuid.uuid4())
+    return {
+        'type': messageType,
+        'clock': clock or {},
+        'text': message,
+        'sender': sender,
+        'id': messageId
+    }
+
+
 
 '''
 Bibliography
