@@ -79,6 +79,9 @@ class GUI(App):
         App.get_running_app().root.children[0].children[2].children[0].text = status
         App.get_running_app().root.children[0].children[2].setStatus(isError)
 
+    def setPeerCount(self, peerCount):
+        App.get_running_app().root.children[0].children[2].children[1].children[0].text = 'Remaining Peers: {0}'.format(peerCount)
+
     def build(self):
         return MainScreen()
 
@@ -89,6 +92,9 @@ def textUpdateGUI(sender, message):
 
 def statusUpdateGUI(status, isError):
     Clock.schedule_once(lambda dt: App.get_running_app().setStatusMessage(status, isError), 0.001)
+
+def updateLivePeerCountGUI(newCount):
+    Clock.schedule_once(lambda dt: App.get_running_app().setPeerCount(newCount), 0.001)
 
 def clearStatusGUI():
     Clock.schedule_once(lambda dt: App.get_running_app().clearStatusMessage(), 0.001)

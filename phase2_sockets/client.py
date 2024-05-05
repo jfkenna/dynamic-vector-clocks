@@ -7,7 +7,7 @@ from shared.client_message import constructMessage, constructHello, constructHel
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
 from shared.network import continueRead, silentFailureClose, sendToSingleAdr, buildNetworkEntry
-from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI
+from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, clearStatusGUI, updateLivePeerCountGUI
 from kivy.lang import Builder
 from kivy.app import App
 import socket
@@ -15,6 +15,7 @@ import uuid
 import sys
 import time
 import selectors
+import copy
 
 
 #TODO UNREGISTER BEFORE CLOSE
@@ -40,7 +41,7 @@ def acceptWorker(serverSocket, peers):
         print(selector)
 
 
-def readWorker(messagesToHandle):
+def readWorker(messagesToHandle, peers):
     while True:
         #https://docs.python.org/3/library/selectors.html
         for key, mask in selector.select():
@@ -50,13 +51,15 @@ def readWorker(messagesToHandle):
             #skip dead entries TODO check if actually necessary
             networkEntry = networkEntries.get(peer, None)
             if networkEntry == None:
-                print('no entry for peer')
                 continue
 
             #read available messages 
             #TODO also lock writes
             with networkEntry['lock']:
-                continueRead(networkEntry, messagesToHandle)
+                readfailed = continueRead(networkEntry, messagesToHandle)
+            if readfailed:
+                handlePeerFailure(peer, peers)
+                
 
 
 def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
@@ -67,6 +70,9 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
     while True:
         if App.get_running_app():
             App.get_running_app().setQueue(outgoingMessageQueue)
+            #could do this somewhere else, but fuck it
+            with peersLock:
+                updateLivePeerCountGUI(len(peers))
             break
         time.sleep(0.005)
     
@@ -225,27 +231,43 @@ def buildSenderSocket():
 
 
 def broadcastToPeers(message, peers):
-    for peer in peers:
-        peerConnection = networkEntries[peer]['connection']
-        print("target data:")
-        print(peer)
-        print(peerConnection)
-        if peerConnection == None or sendToSingleAdr(message, peerConnection):
+
+    #clone peer list so that multiple workers to broadcast different messages
+    #simultaneously (e.g. one thread retransmitting broadcast, one thread sending new message) 
+    with peersLock:
+        currentPeers = copy.deepcopy(peers)
+    
+    for peer in currentPeers:
+        networkEntry = networkEntries[peer]
+        if networkEntry == None or networkEntry['connection'] == None:
+            continue
+        
+        with networkEntry['lock']:
+            sendFailed = sendToSingleAdr(message, networkEntry['connection'])
+
+        if sendFailed:
             handlePeerFailure(peer, peers)
     else:
         clearStatusGUI()
 
 
 def handlePeerFailure(peer, peers):
+    print("HANDLING PEER FAILURE")
     with peersLock:
+        connection = networkEntries[peer]['connection']
         del networkEntries[peer]
         peers.remove(peer)
+        selector.unregister(connection)
+        silentFailureClose(connection)
+
+        remainingPeers = len(peers)
+        updateLivePeerCountGUI(remainingPeers)
 
         #handle total failure case
         #TOOD exit system
-        if len(peers) == 0:
+        if remainingPeers == 0:
             print('Totally disconnected from network')
-    return
+
 
 def getPeerHosts():
     initialPeers = []
@@ -365,7 +387,7 @@ def main():
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers, processId)))
         handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, outgoingMessageQueue)))
-        readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, )))
+        readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, peers, )))
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers[i].start()
         handlerWorkers[i].start()

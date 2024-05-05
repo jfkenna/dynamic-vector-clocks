@@ -78,9 +78,21 @@
                 Rectangle:
                     size: self.size
                     pos: self.pos
+            BoxLayout:
+                canvas.before:
+                    Color:
+                        rgba: (1,1,1,1)
+                    Rectangle:
+                        size: self.size
+                        pos: self.pos
+                Label:
+                    text: 'remaining peers'
+                    color: (0,0,0,1)
+
             Label:
                 text: ''
                 color: (0,0,0,1)
+            
         BoxLayout:
             orientation: 'horizontal'
             size_hint: (1, .75)

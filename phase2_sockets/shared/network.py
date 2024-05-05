@@ -36,7 +36,7 @@ def continueRead(networkEntry, messageQueue):
     headerSize = struct.calcsize('!l')
     data = networkEntry['connection'].recv(2048)
 
-    if not data:
+    if not data or len(data) == 0:
         return True
     
     networkEntry['buffer'] += data
