@@ -111,7 +111,8 @@ The process of Phase 2's implementations is based as follows:
     - `REGISTRY_PROTOCOL_PORT`: The peer registry server's port number it will utilise.
     - `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration.
     - `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay.
-    - `MOCK_NETWORK_DELAY`: The minimum network delay length in seconds.
+    - `MOCK_NETWORK_DELAY_MIN`: The minimum network delay length in ms. (100 mininum)
+    - `MAX_NETWORK_DELAY_MIN`: The maximum network delay length in ms. (2500 maximum)
 2.  - When `ENABLE_PEER_SERVER` is set as `0`: peers will need to specify each peer they would like to connect with on joining the network. Once they're done, they'll need to specifying `f` or `finished` to connect to the network. 
     - When `ENABLE_PEER_SERVER` is set as `1`: peers will connect with the central server that has been started at a specific IP address. The connecting peer will try to fetch the peers from the server with a `RegistryMessageType.GET_PEERS`, which the server will reply with a `RegistryMessageType.PEER_RESPONSE` with a peer list. If they're the first peer connected, they'll register themselves to the server's peer list with a `RegistryMessageType.REGISTER_PEER` message to the server and then register themselves to the server via the internal `registerAndCompleteInitialisation` function. Otherwise - the connecting peer will broadcast a `MessageType.HELLO` to all the known peers. Each active peer thus returns a `MessageType.HELLO_RESPONSE` back to the registering peer. The connecting process then join messages captured prior to initialisation with any undelivered messages from the other processes - and then completes its registration by `registerAndCompleteInitialisation`.
 3. In the registration and peer startup process above - each peer constructs a `networkWorker` (for handling connection queue and incoming messages from other peers), a `sendWorker` (for handling outgoing messages) and a `acceptWorker` (for accepting connections from other peers).
@@ -140,7 +141,7 @@ The running client/peer will then start its respective workers; and then loop fo
 
 ```
 ╰─ python3 client.py 127.0.0.1
-[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-06_36.txt
+[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-05_27.txt
 [INFO   ] [Kivy        ] v2.3.0
 [INFO   ] [Kivy        ] Installed at "/usr/local/lib/python3.12/site-packages/kivy/__init__.py"
 [INFO   ] [Python      ] v3.12.3 (main, Apr  9 2024, 08:09:14) [Clang 15.0.0 (clang-1500.3.9.4)]
@@ -162,19 +163,22 @@ The running client/peer will then start its respective workers; and then loop fo
 [INFO   ] [GL          ] Texture max units <16>
 [INFO   ] [Window      ] auto add sdl2 input provider
 [INFO   ] [Window      ] virtual keyboard not allowed, single mode, not docked
-Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '0', 'ENABLE_NETWORK_DELAY': '0', 'MOCK_NETWORK_DELAY': '5', 'CLIENT_LISTEN_IP': '127.0.0.1'}
+Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '0', 'ENABLE_NETWORK_DELAY': '1', 'MOCK_NETWORK_DELAY_MIN': '100', 'MOCK_NETWORK_DELAY_MAX': '2500', 'CLIENT_LISTEN_IP': '127.0.0.1'}
 Enter peer IPs/hostnames [enter 'finished' or 'f' to continue]
 Enter hostname: 127.0.0.2
 Added peer at 127.0.0.2
 Enter hostname: f
-Could not establish connection for peer 127.0.0.2
-Proceeding without it
-STARTED WITH NO PEERS
-[s0] Started
 Client listening at 127.0.0.1 on port 9876
-Process ID is 127.0.0.1
+Process ID is 4ef09c8a-f962-48f4-a161-72f748201046
 [a0] Started
-waiting for at least one other peer to establish connection...
+[w0] Started
+[s0] Started
+Error connecting to adr: <class 'OSError'>
+Failed to broadcast message to any of our peers. We may be disconnected from the network...
+Failed to send HELLO message to any of our peers. Registering and starting with an empty clock
+connecting to the network, please wait...
+[INFO   ] [Base        ] Start application main loop
+[INFO   ] [GL          ] NPOT texture support is available
 ```
 
 Other clients/peers that wish to connect to the network will need to be connected in a similar fashion - and **with a different IP/hostname**. 
