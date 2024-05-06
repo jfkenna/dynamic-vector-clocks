@@ -140,7 +140,7 @@ The running client/peer will then start its respective workers; and then loop fo
 
 ```
 ╰─ python3 client.py 127.0.0.1
-[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-05_27.txt
+[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-06_36.txt
 [INFO   ] [Kivy        ] v2.3.0
 [INFO   ] [Kivy        ] Installed at "/usr/local/lib/python3.12/site-packages/kivy/__init__.py"
 [INFO   ] [Python      ] v3.12.3 (main, Apr  9 2024, 08:09:14) [Clang 15.0.0 (clang-1500.3.9.4)]
@@ -162,22 +162,19 @@ The running client/peer will then start its respective workers; and then loop fo
 [INFO   ] [GL          ] Texture max units <16>
 [INFO   ] [Window      ] auto add sdl2 input provider
 [INFO   ] [Window      ] virtual keyboard not allowed, single mode, not docked
-Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '0', 'ENABLE_NETWORK_DELAY': '1', 'MOCK_NETWORK_DELAY_MIN': '100', 'MOCK_NETWORK_DELAY_MAX': '2500', 'CLIENT_LISTEN_IP': '127.0.0.1'}
+Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '0', 'ENABLE_NETWORK_DELAY': '0', 'MOCK_NETWORK_DELAY': '5', 'CLIENT_LISTEN_IP': '127.0.0.1'}
 Enter peer IPs/hostnames [enter 'finished' or 'f' to continue]
 Enter hostname: 127.0.0.2
 Added peer at 127.0.0.2
 Enter hostname: f
-Client listening at 127.0.0.1 on port 9876
-Process ID is 4ef09c8a-f962-48f4-a161-72f748201046
-[a0] Started
-[w0] Started
+Could not establish connection for peer 127.0.0.2
+Proceeding without it
+STARTED WITH NO PEERS
 [s0] Started
-Error connecting to adr: <class 'OSError'>
-Failed to broadcast message to any of our peers. We may be disconnected from the network...
-Failed to send HELLO message to any of our peers. Registering and starting with an empty clock
-connecting to the network, please wait...
-[INFO   ] [Base        ] Start application main loop
-[INFO   ] [GL          ] NPOT texture support is available
+Client listening at 127.0.0.1 on port 9876
+Process ID is 127.0.0.1
+[a0] Started
+waiting for at least one other peer to establish connection...
 ```
 
 Other clients/peers that wish to connect to the network will need to be connected in a similar fashion - and **with a different IP/hostname**. 
