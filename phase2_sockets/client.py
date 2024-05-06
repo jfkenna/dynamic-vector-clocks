@@ -100,8 +100,6 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
         except Empty:
             continue
         
-
-        #ugly, but fix if we have time TODO
         parsedMessage = parseJsonMessage(receivedMessage, [], False)
         if parsedMessage == None:
             return

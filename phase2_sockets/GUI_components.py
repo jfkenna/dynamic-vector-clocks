@@ -12,6 +12,10 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from shared.client_message import constructMessage, MessageType, messageToJson
 
+#************************************************************
+#Custom classes (styled in layout.kv)
+
+#scrollable message container
 class Messages(RecycleView):
     def __init__(self, **kwargs):
         super(Messages, self).__init__(**kwargs)
@@ -20,26 +24,27 @@ class Messages(RecycleView):
     def addMessage(self, sender, msg):
         self.data.append({'sender': sender, 'msg': msg})
 
+#top of page errors
 class ErrorStatus(BoxLayout):
     rgba = ListProperty([0.5, 0.5, 0.5, 1])
 
     def __init__(self, **kwargs):
         super(ErrorStatus, self).__init__(**kwargs)
 
-    def clearStatus(self):
-        self.rgba = [0.5, 0.5, 0.5, 1]
-
     def setStatus(self, isError):
-        self.rgba = [1, 0, 0, 1] if isError else [0, 1, 0, 1] 
+        self.rgba = [1, 0, 0, 1] if isError else [0.5, 0.5, 0.5, 1] 
 
+#total message
 class LabelContainer(BoxLayout):
     def __init__(self, **kwargs):
         super(LabelContainer, self).__init__(**kwargs)
 
+#message text
 class AlignedLabel(Label):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super(AlignedLabel, self).__init__(**kwargs)
 
+#main app container
 class MainScreen(BoxLayout):
         def addMessage(self):
             textbox = App.get_running_app().root.children[0].children[0].children[1]
@@ -54,11 +59,12 @@ class MainScreen(BoxLayout):
             textbox.text = ''
             App.get_running_app().root.children[0].children[1].children[0].addMessage('You', message)
 
+
+#main GUI class, handles display and contains control methods 
 class GUI(App):
            
     def __init__(self, *args, **kwargs):
         super().__init__(**kwargs)
-        print(args)
         Window.bind(on_request_close=self.cleanup)
     
     def cleanup(self, *args):
@@ -85,6 +91,10 @@ class GUI(App):
     def build(self):
         return MainScreen()
 
+
+#************************************************************
+#UI update methods, schedule events for the GUI thread to perform
+
 #TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
 #OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
 def textUpdateGUI(sender, message):
@@ -95,6 +105,3 @@ def statusUpdateGUI(status, isError):
 
 def updateLivePeerCountGUI(newCount):
     Clock.schedule_once(lambda dt: App.get_running_app().setPeerCount(newCount), 0.001)
-
-def clearStatusGUI():
-    Clock.schedule_once(lambda dt: App.get_running_app().clearStatusMessage(), 0.001)
