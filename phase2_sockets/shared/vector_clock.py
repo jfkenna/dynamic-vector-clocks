@@ -56,27 +56,27 @@ def canDeliver(processVectorClock, message):
     messageVectorClock = message["clock"]                       # Message DVC
     senderUuid = message["sender"]                              # Sender UUID
 
+    mVectorClockSenderIdx = obtainIndexOfUuid(messageVectorClock, senderUuid)
     if seenSender(processVectorClock, senderUuid):
         # Lets obtain the index of the sender in the process and message VCs
         pVectorClockSenderIdx = obtainIndexOfUuid(processVectorClock, senderUuid)
-        mVectorClockSenderIdx = obtainIndexOfUuid(messageVectorClock, senderUuid)
-
         # Check if the message's sender index in the message VC is 1 greater than the index in the process's DVC
-        senderIndexValid = messageVectorClock[mVectorClockSenderIdx][1] == processVectorClock[pVectorClockSenderIdx][1] + 1 
-
-        # Check other indexes on the message clock are <= the process's clock
-        otherIndexesValid = True                                # Initially, set other_msg_index_valid True (all other known index DC)
-        for row in messageVectorClock:                          # For each known process in the message clock
-            if not row[0] == senderUuid:     
-                pVectorClockOtherUIdx = obtainIndexOfUuid(processVectorClock, row[0])        # Find the row of the other UUID in the process's VC
-                if not row[1] <= processVectorClock[pVectorClockOtherUIdx][1]:
-                    otherIndexesValid = False
-                    break
-
-        # Set deliverable upon the sender index valid (message > by 1) and each other index in the message VC is <= process's index
-        delivarable = senderIndexValid and otherIndexesValid  
+        senderIndexValid = messageVectorClock[mVectorClockSenderIdx][1] == processVectorClock[pVectorClockSenderIdx][1] + 1
     else:
-        delivarable = True      # TODO: Only until we implement initial hello where process knows of all processes
+        #if we haven't seen sender yet in clone or messages, then it is only valid if its their first message
+        senderIndexValid = messageVectorClock[mVectorClockSenderIdx][1] <= 1
+    
+    # Check other indexes on the message clock are <= the process's clock
+    otherIndexesValid = True                                # Initially, set other_msg_index_valid True (all other known index DC)
+    for row in messageVectorClock:                          # For each known process in the message clock
+        if not row[0] == senderUuid:     
+            pVectorClockOtherUIdx = obtainIndexOfUuid(processVectorClock, row[0])        # Find the row of the other UUID in the process's VC
+            if not row[1] <= processVectorClock[pVectorClockOtherUIdx][1]:
+                otherIndexesValid = False
+                break
+
+    # Set deliverable upon the sender index valid (message > by 1) and each other index in the message VC is <= process's index
+    delivarable = senderIndexValid and otherIndexesValid  
 
     return delivarable
 

@@ -14,21 +14,17 @@ import socket
 import uuid
 import sys
 import time
+import copy
 
 def acceptWorker(connectionQueue, serverSocket):
     print('[a0] Started')
     while True:
-        print(shutdownFlag.is_set())
-        if shutdownFlag.is_set():
-            return
         connectionQueue.put(serverSocket.accept())
 
 
 def sendWorker(outgoingMessageQueue, peers, processId):
     print('[s0] Started')
 
-    #TODO messy, but I still can't figure out how to pass in args when launching app
-    #it works with globals, but that makes client.py far too bloated
     #pass in queue once GUI starts
     while True:
         if App.get_running_app():
@@ -38,13 +34,12 @@ def sendWorker(outgoingMessageQueue, peers, processId):
     
     #main loop
     while True:
-        if shutdownFlag.is_set():
-            return
         outgoingMessageText = outgoingMessageQueue.get()
         global processVectorClock 
-        with incrementLock:
-            processVectorClock = incrementVectorClock(processVectorClock, processId)
-        outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
+        with deliverabilityLock:
+            with incrementLock:
+                processVectorClock = incrementVectorClock(processVectorClock, processId)
+                outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, outgoingMessageText, processId))
         broadcastToPeers(outgoingMessage, peers)
 
 def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, id):
@@ -52,8 +47,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
     global processVectorClock
     global processMessageQueue
     while True:
-        if shutdownFlag.is_set():
-            return
         connection, adr = connectionQueue.get()
         try:
             #attempt to read a single message from the connection
@@ -88,10 +81,6 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
             if (not initialisationComplete.is_set()) and (not initiallyUnconnected.is_set()):
                 print('A process attempted to clone this node before it was initialized')
                 return
-            
-            #case where we provide clone data as an unconnected, uninitialized peer
-            #TODO triple check there is no case where this can cause perma-wait issues
-            #in scenarios where 'HELLO' is broadcast to both a real peer that is sending messages, and an unconnected peer
 
             if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
                 emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
@@ -105,24 +94,24 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
                 silentFailureClose(senderSocket)
                 
                 #initialise after sending peer data
-                peers.append(requestingPeer) #TODO see comment below on need for lock on peers - very important to address
-                handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None) #TODO double check if necessary for this empty case
+                with peersLock:
+                    peers.append(requestingPeer)
+                with deliverabilityLock:
+                    with incrementLock:
+                        handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None)
                 registerAndCompleteInitialisation()
                 continue
 
-            #TODO need to lock on vector clock and message queue here
-            #i think i'll just make a monitor class to simplify all these locks
-            #for now, don't even lock, just so basic functionality is present
-            helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
-            senderSocket = buildSenderSocket()
-            sendToSingleAdr(helloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT']))
-            silentFailureClose(senderSocket)
 
-            #TODO I think a lock is required for the case where we are iterating over peers at the same time
-            #the new peer is added - we might not send one of the messages to the new peer, causing dropped messages
-            #so all sending should stop until we finish handling the 'HELLO' and adding the peer.
-            #also need to think about the case where messages are in process of being sent by another thread so are not in enqueued messages, but are also not sent to peer
-            peers.append(requestingPeer)
+            with deliverabilityLock:
+                with incrementLock:
+                    helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
+                    senderSocket = buildSenderSocket()
+                    sendToSingleAdr(helloResponse, senderSocket, requestingPeer, int(env['PROTOCOL_PORT']))
+                    silentFailureClose(senderSocket)
+
+            with peersLock:
+                peers.append(requestingPeer)
             continue
 
         #special handling for hello responses
@@ -147,6 +136,8 @@ def networkWorker(connectionQueue, receivedMessages, preInitialisedReceivedMessa
         handleMessage(message, receivedMessages, peers)
 
 def handleMessage(message, receivedMessages, peers):
+    global processVectorClock
+    global processMessageQueue
 
     with messageLock:
         if message['id'] in receivedMessages:
@@ -154,30 +145,23 @@ def handleMessage(message, receivedMessages, peers):
         #add to list of received messages
         receivedMessages[message['id']] = True
 
-    #while our setup is incomplete, don't broadcast to peers, and don't attempt to deliver
-    #simply enqueue and return - delivery will be handled once setup completes
-    #TODO triple check there's no flow where messages can be missed here
-    #i think the lock order is OK, but confirmation is always nice
     with preInitialisedLock:
         if not initialisationComplete.is_set():
             preInitialisedReceivedMessages.append(message)
             return
 
-
-    global processVectorClock
-    global processMessageQueue
-
     #broadcast to other peers (reliable broadcast, so each receipt will broadcast to all other known nodes)
     jsonMessage = messageToJson(message)
     broadcastToPeers(jsonMessage, peers)
-    # If this processId is the sender of the message
+
     if not message['sender'] == processId:
         with deliverabilityLock:
-            if canDeliver(processVectorClock, message):
-                processVectorClock = deliverMessage(processVectorClock, message, processId)
-                textUpdateGUI(message['sender'], message['text'])
-            else:
-                processMessageQueue.append(message)
+            with incrementLock:
+                if canDeliver(processVectorClock, message):
+                    processVectorClock = deliverMessage(processVectorClock, message, processId)
+                    textUpdateGUI(message['sender'], message['text'])
+                else:
+                    processMessageQueue.append(message)
 
             processVectorClock = handleMessageQueue(processVectorClock, processMessageQueue, message)
 
@@ -206,15 +190,15 @@ def buildSenderSocket():
 
 def broadcastToPeers(message, peers):
     failedCount = 0
-    for peer in peers:
+    with peersLock:
+        safeIterablePeerCopy = copy.deepcopy(peers)
+    for peer in safeIterablePeerCopy:
         senderSocket = buildSenderSocket()
         if sendToSingleAdr(message, senderSocket, peer, int(env['PROTOCOL_PORT'])):
             failedCount += 1
         silentFailureClose(senderSocket)
     
     if (failedCount == len(peers)):
-        #TODO decide on error handling here
-        #maybe try to get a new set of peers from the server, and if that also fails, close completely?
         print('Failed to broadcast message to any of our peers. We may be disconnected from the network...')
         statusUpdateGUI('No peers were able to receive message. We may be disconnected from the network', True)
         return True
@@ -247,8 +231,6 @@ def getPeerHosts():
 def sayHello(peers):
     helloMessage = messageToJson(constructHello(processId))
     if broadcastToPeers(helloMessage, peers):
-        #TODO also need logic to handle the case where peer receives request but never replies
-        #could be handled with a timer. But to be honest, this server logic is growing really complex
         print('Failed to send HELLO message to any of our peers. Registering and starting with an empty clock')
         registerAndCompleteInitialisation()
 
@@ -258,20 +240,12 @@ def main():
     outgoingMessageQueue = Queue()
 
     #create shared resources
-    #suprisingly, default python queue is thread-safe and blocks on .get()
     connectionQueue = Queue()
     
-    #use with 'messageLock' to ensure mutex
     receivedMessages = {}
 
     #initial message collector (use while hello call is in-flight)
-    #use with 'preInitialisedLock' to ensure mutex
     preInitialisedReceivedMessages = []
-
-    #TODO consider adding new peers at runtime based on received messages, so network is more fault tolerant
-    #it's very brittle right now - if you add a single peer that only knows one other peer, it's a network partition waiting to happen
-    #this is an extension, so for our first implementation just start with a fixed set of peers that we can multicast to
-
 
     #get peers from peer server or command line based on params
     if int(env['ENABLE_PEER_SERVER']) == 1:
@@ -326,17 +300,21 @@ def main():
     print('Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
     print("Process ID is", processId)
     acceptThread = Thread(target=acceptWorker, args=(connectionQueue, acceptSocket, ))
+    acceptThread.daemon = True
     acceptThread.start()
+    
 
     #message handler threads
     handlerThreads = []
     for i in range(0, int(env['CLIENT_WORKER_THREADS'])):
         worker = Thread(target=networkWorker, args=(connectionQueue, receivedMessages, preInitialisedReceivedMessages, peers, i, ))
         handlerThreads.append(worker)
+        worker.daemon = True
         worker.start()
 
     #thread for self-initiated messages
     sendThread = Thread(target=sendWorker, args=(outgoingMessageQueue, peers, processId))
+    sendThread.daemon = True
     sendThread.start()
 
     #clone state of some other node in the network as own initial state
@@ -354,10 +332,8 @@ def main():
     Builder.load_file('layout.kv')
     GUI(title='CHAT CLIENT [{0}]'.format(env['CLIENT_LISTEN_IP'])).run()
 
-    #set exit flag once GUI terminates
-    #TODO get this actually working, right now it fails due to threads blocking (python has no thread interrupt method)
-    shutdownFlag.set()
     acceptSocket.close()
+    sys.exit()
 
 
 #handle .env as global variable
@@ -372,29 +348,44 @@ if len(sys.argv) < 2:
     exit()
 env['CLIENT_LISTEN_IP'] = sys.argv[1]
 
-if int(env['ENABLE_PEER_SERVER']) == 1 and len(sys.argv) < 3:
-    print("ENABLE_PEER_SERVER flag was set, but you did not provide the ip of a peer registry")
-    print("exiting...")
-    exit()
-
-if (int(env['ENABLE_PEER_SERVER']) == 1):
+if int(env['ENABLE_PEER_SERVER']) == 1 and int(env['ENABLE_NETWORK_DELAY']) == 1:
+    if len(sys.argv) < 4:
+        print("You must provide arg for server and throttled ip")
+        print("exiting...")
+        exit()
     env['PEER_REGISTRY_IP'] = sys.argv[2]
+    env['THROTTLE_IP'] = sys.argv[3]
+
+if int(env['ENABLE_PEER_SERVER']) == 1 and int(env['ENABLE_NETWORK_DELAY']) == 0:
+    if len(sys.argv) < 3:
+        print("You must provide arg for server")
+        print("exiting...")
+        exit()
+    env['PEER_REGISTRY_IP'] = sys.argv[2]
+
+if int(env['ENABLE_PEER_SERVER']) == 0 and int(env['ENABLE_NETWORK_DELAY']) == 1:
+    if len(sys.argv) < 3:
+        print("You must provide arg for throttled ip")
+        print("exiting...")
+        exit()
+    env['THROTTLE_IP'] = sys.argv[2]
 
 print('Combined env and argv config:', dict(env))
 
-#shutdown event
-shutdownFlag = Event()
-
-#global lock for received message dict
+#locks
+#received message dict
 messageLock = Lock()
 
-#global lock for pre-initialisation message queue
+#re-initialisation message queue
 preInitialisedLock = Lock()
 
-#global lock for checking for message deliverability
+#lock for checking message deliverability
 deliverabilityLock = Lock()
 
-#global lock for this peer to increment its own vector clock
+#peers lock
+peersLock = Lock()
+
+#lock for incrementing vector clock
 incrementLock = Lock()
 
 #initialisation complete event

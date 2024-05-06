@@ -52,9 +52,9 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
     if useClientDefaults:
         match parsedMessage['type']:
             case MessageType.BROADCAST_MESSAGE:
-                requiredFields = ['']
+                requiredFields = ['id', 'sender', 'type', 'clock', 'text']
             case MessageType.HELLO:
-                requiredFields = ['id, sender, type']
+                requiredFields = ['id', 'sender', 'type']
             case MessageType.HELLO_RESPONSE:
                 requiredFields = ['id', 'sender', 'type', 'clock', 'undeliveredMessages']
             case MessageType.LEAVE_NETWORK:
@@ -67,7 +67,6 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
                 print('Message was missing required field {0}'.format(required))
                 return None
 
-    #TODO validate type of individual fields
     return parsedMessage
 
 '''

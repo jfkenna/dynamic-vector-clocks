@@ -79,8 +79,6 @@ class GUI(App):
     def build(self):
         return MainScreen()
 
-#TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
-#OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
 def textUpdateGUI(sender, message):
     Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(sender, message), 0.001)
 
