@@ -121,7 +121,9 @@ The process of Phase 2's implementations is based as follows:
 
 ### Invocation
 
-As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below: 
+As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below.
+
+**Note:** For macOS users, the extension of the local loopback IP addresses beyond `127.0.0.1` may be required. If running Phase 2 on a macOS based machine, ensure that additional IPs beyond this address is able to be set.
 
 #### Without a Peer Registry Server
 
