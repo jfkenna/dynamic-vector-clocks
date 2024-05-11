@@ -28,11 +28,11 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
     if useClientDefaults:
         match parsedMessage['type']:
             case MessageType.BROADCAST_MESSAGE:
-                requiredFields = ['']
+                requiredFields = ['id', 'sender', 'senderIp', 'type', 'clock', 'text']
             case MessageType.HELLO:
-                requiredFields = ['id, sender, type']
+                requiredFields = ['id', 'sender', 'senderIp', 'type']
             case MessageType.HELLO_RESPONSE:
-                requiredFields = ['id', 'sender', 'type', 'clock', 'undeliveredMessages']
+                requiredFields = ['id', 'sender', 'senderIp', 'type', 'clock', 'undeliveredMessages']
             case MessageType.LEAVE_NETWORK:
                 requiredFields = []
             case _:
@@ -49,33 +49,36 @@ def parseJsonMessage(message, requiredFields, useClientDefaults = False):
 #************************************************************
 #message constructors
 
-def constructHello(sender):
+def constructHello(sender, senderIp):
     messageId = str(uuid.uuid4())
     return {
         'id': messageId,
         'sender': sender,
+        'senderIp': senderIp,
         'type': MessageType.HELLO
     }
 
 
-def constructHelloResponse(sender, clock, undeliveredMessages):
+def constructHelloResponse(sender, senderIp, clock, undeliveredMessages):
     messageId = str(uuid.uuid4())
     return {
         'id': messageId,
         'sender': sender,
+        'senderIp': senderIp,
         'type': MessageType.HELLO_RESPONSE,
         'clock': clock,
         'undeliveredMessages': undeliveredMessages
     }
 
 
-def constructMessage(messageType, clock, message, sender):
+def constructMessage(messageType, clock, message, sender, senderIp):
     messageId = str(uuid.uuid4())
     return {
         'type': messageType,
         'clock': clock or {},
         'text': message,
         'sender': sender,
+        'senderIp': senderIp,
         'id': messageId
     }
 

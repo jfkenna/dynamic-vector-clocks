@@ -51,8 +51,8 @@ class MainScreen(BoxLayout):
             message = textbox.text
 
             #dispatch to queue
-            #message will be hydrated with clock by the broadcast handler
-            partiallyCompleteMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, {}, message, None))
+            #message will be hydrated with clock and process id/ip by the broadcast handler
+            partiallyCompleteMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, {}, message, None, None))
             App.get_running_app().dispatchToQueue(partiallyCompleteMessage)
 
             #update UI

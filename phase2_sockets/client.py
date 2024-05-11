@@ -77,7 +77,7 @@ def readWorker(messagesToHandle, peers):
 
 #worker thread for broadcasting enqueued messages
 #used for sending own messages, and for rebroadcasting messages from other peers
-def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
+def broadcastWorker(outgoingMessageQueue, receivedMessages, peers):
     global processVectorClock 
     print('[s0] Started')
 
@@ -110,7 +110,7 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers, processId):
             receivedMessages[parsedMessage['id']] = True
             with incrementLock:
                 processVectorClock = incrementVectorClock(processVectorClock, processId)
-                outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, parsedMessage['text'], processId))
+                outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, parsedMessage['text'], processId, processIp))
         else:
             outgoingMessage = receivedMessage
         broadcastToPeers(outgoingMessage, peers)
@@ -135,10 +135,11 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
         peerNetworkData = messageInfo[0]
 
         #ADDITION FOR DEMONSTRATION
+        #NOT REQUIRED FOR APP TO FUNCTION
         #SIMULATES NETWORK DELAY BY ADDING MESSAGES TO THE QUEUE AFTER 5 SECONDS HAVE PASSED
         if int(env['ENABLE_NETWORK_DELAY']) == 1 and message['type'] == MessageType.BROADCAST_MESSAGE:
             try:
-                if message['sender'] == env['THROTTLED_IP']:
+                if message['senderIp'] == env['THROTTLED_IP']:
                     #if we haven't held the message back before, create a new thread
                     #to re-add it back to messages after some time has passed
                     if messageInfo[2] == False:
@@ -185,7 +186,7 @@ def handleHello(networkEntry, message):
     #case where we provide clone data as an unconnected, uninitialized peer
     if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
         with incrementLock:
-            emptyHelloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, preInitialisedReceivedMessages))
+            emptyHelloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, preInitialisedReceivedMessages))
         
         with networkEntry['lock']:
             if sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
@@ -200,7 +201,7 @@ def handleHello(networkEntry, message):
 
     #case where we provide clone data as an initialised node in the network
     with incrementLock:
-        helloResponse = messageToJson(constructHelloResponse(processId, processVectorClock, processMessageQueue))
+        helloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, processMessageQueue))
 
     with networkEntry['lock']:
         if sendToSingleAdr(helloResponse, networkEntry['connection']):
@@ -340,7 +341,7 @@ def registerAndCompleteInitialisation():
 
 #helper, enqueues the node's initial HELLO message
 def sayHello(peers, outgoingMessageQueue):
-    helloMessage = messageToJson(constructHello(processId))
+    helloMessage = messageToJson(constructHello(processId, processIp))
     outgoingMessageQueue.put(helloMessage)
     registerAndCompleteInitialisation() #TODO - STOP INITIALISATION UNTIL HELLO COMPLETES
 
@@ -427,7 +428,7 @@ def main():
     handlerWorkers = []
     readWorkers = []
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
-        broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers, processId)))
+        broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers)))
         handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, outgoingMessageQueue, )))
         readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, peers, )))
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
@@ -524,7 +525,8 @@ initiallyUnconnected = Event()
 #************************************************************
 #vector clock and causal message queue
 
-processId = env['CLIENT_LISTEN_IP']
+processIp = env['CLIENT_LISTEN_IP']
+processId = str(uuid.uuid4())
 # This process's vector clock - initialised with its own ip i.e 
 # [ [127.0.0.XX, 0] ]
 processVectorClock = [[processId, 0]]
