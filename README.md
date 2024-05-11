@@ -2,7 +2,7 @@
 
 This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms - for Semetser 1, 2024.
 
-The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially - the choice of **Matrix Clocks** was elected on the team's first choice of algorithm to implemented; however the team opted for the former based on the real-world application of a multi-tenant chat application which primarily orients around broadcasting messages between peers - and additionally (most importantly), the dynamic nature of Dynamic Vector Clocks not needing to know how many peers are in the system initially. Furthermore, the _space_ that is required when storing Matrix Clocks far outweighs that of Dynamic Vector Clocks - which is better suited for this need.
+The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially -  **Matrix Clocks** were selected as the team's first choice of algorithm to implement; however the team ultimately decided to use **Dynamic Vector Clocks** due to the fact that the real-world application of a multi-tenant chat application primarily orients around broadcasting messages between peers - and additionally (most importantly), the dynamic nature of Dynamic Vector Clocks not needing to know how many peers are in the system initially. Furthermore, the _space_ that is required when storing Matrix Clocks far outweighs that of Dynamic Vector Clocks - which is better suited for this need.
 
 The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase built upon the base implementation of the algorithm within Python that was then referenced and implemented in the second. Each phase is described below - the design, approach and invocation of the algorithm within each.
 
@@ -96,13 +96,18 @@ Number Sum:	 20.086
 
 ### Approach
 
-The second phase of this project takes forward the Dynamic Vector Clock Algorithm using the MPI implementation from Phase 1 as the basis, now using **sockets** as the main means of integration in Python - with a Graphical User Interface (GUI) utilising [Kivy](https://kivy.org/) - a cross platform and open source library for developing Python applications with visual elements (including components such as windows, images, audio, buttons and more).
+The second phase of this project takes forward the Dynamic Vector Clock Algorithm using the MPI implementation from Phase 1 as the basis, now using **sockets** as the main means of p2p communication. To improve user experience, a Graphical User Interface (GUI) has been implemented using using [Kivy](https://kivy.org/) - a cross platform and open source library for developing Python applications with visual elements (including components such as windows, images, audio, buttons and more).
 
-Unlinke the known quantity and expected send/receives of processes in the first phase, the invocation of this approach is more true to life and expected in multi-tenant chat applications that are seen in many social media sites and applications of the modern technological society. It's part and parcel that users expect to join in (and conversely drop away) from a chat room; the former with an unbound ceiling of "peers" - whether its just a 1:1 conversation, or a room with more than 1000 people in it. Expectations of ordered messaging between all involved is key to a functional experience achieving the underlying causal delivery guarantee of messages.
+This phase focuses on using DVCs to provide functionality expected from modern multi-tenant chat applications, namely the ability to:
+- Be able to join in (and conversely drop away) from chat rooms in real time
+- Be able to have new members join the chat room without limit
+- Be able to have their messages delivered in an order that makes sense (i.e. with casusal causal delivery). 
 
-True to causality - if there's a network partition at one of the peers - or perhaps that peer itself is under heavy load; it _may_ receive messages out-of-order akin to the examples shown in Phase 1. The DVC algorithm integrated with this part of our project will ensure that messages queued are sent in causal ordering. 
+As these chat systems use sockets and run over the network, there's a real chance clients _may_ receive messages out-of-order due to heavy load or network congestion. We make use of DVCs with reliable broadcast to ensure that messages are always delivered according to a causal ordering, even if they're received by the client out of order.
 
 ### Implementation Overview
+
+N.B. If you're not interested in the implementation, instructions on how to run can be found [here](#invocation-\--socket-implementation). 
 
 #### Initial user input
 Based on the `ENABLE_PEER_SERVER` param, peers are either manually gathered from user input, or are fetched from the peer server.
@@ -110,7 +115,7 @@ Based on the `ENABLE_PEER_SERVER` param, peers are either manually gathered from
 - When `ENABLE_PEER_SERVER` is set as `1`: peers will connect with the central server that has been started at a specific IP address. The connecting peer will try to fetch the peers from the server with a `RegistryMessageType.GET_PEERS`, which the server will reply with a `RegistryMessageType.PEER_RESPONSE` with a peer list. If they're the first peer connected, they'll register themselves to the server's peer list with a `RegistryMessageType.REGISTER_PEER` message to the server and then register themselves with the registry server.
 
 #### Initial peer setup (cloning)
-After peers are gathered, the client broadcasts a `MessageType.HELLO` to all known peers, and then begins collecting all received messages. Peers receiving a `MessageType.HELLO` reply to the requesting peer with a `MessageType.HELLO_RESPONSE` that contains their current clock and undelivered message queue. The requesting peer initialises its clock to match the first clock it receives. It then joins its message queue with the received message queue, and then delivers all deliverable messages from the queue. Once the clock and queue are setup, the peer is ready to chat and launches its GUI.
+After peers are gathered, the client broadcasts a `MessageType.HELLO` to all known peers, and then begins collecting all received messages. Peers receiving a `MessageType.HELLO` reply to the requesting peer with a `MessageType.HELLO_RESPONSE` that contains their current clock and undelivered message queue. The requesting peer initialises its clock to match the first clock it receives. It then joins its message queue with the message queue received from the peer whose clock it cloned, and then delivers all deliverable messages from the queue. Once the clock and queue are setup, the peer has a valid state and is ready to chat. The GUI is then launched.
 
 #### Workers and data flow
 After gathering initial user input, the client starts the following worker threads:
@@ -141,16 +146,15 @@ All messages sent in the system consist of a "message length" represented as a f
 |variable length                |json, encoded as a utf-8 byte string |Represents the content of the message         |
 
 
-### Invocation
+### Invocation - Socket Implementation
 
 #### .env parameters
-Based on the local `dotenv` file (`.env`) within the `/phase2_sockets` directory - peers can elect to join the network based two main scenarios. The options are where peers elect to chat _without_ a central peer registry server handling automatic peer registration/deregistration within the network, or _with_ the server enabled (**started previously**) - which will automatically connect pre-registered peers together. This is set through the `ENABLE_PEER_SERVER` variable as above. <br/> Other environment variables are exposed in the `.env` file; namely the following:
-    - `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will utilise.
-    - `PROTOCOL_PORT`: The port number that a client/peer will utilise for connecting to others.
-    - `REGISTRY_PROTOCOL_PORT`: The peer registry server's port number it will utilise.
-    - `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration. Takes values of 0 (disabled) or 1 (enabled).
-    - `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay. Takes values of 0 (disabled) or 1 (enabled).
-    - `MOCK_NETWORK_DELAY`: The amount of time the simulated delay should last for. Value should be provided in seconds.
+- `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will utilise.
+- `PROTOCOL_PORT`: The port number that a client/peer will use for p2p communication
+- `REGISTRY_PROTOCOL_PORT`: The port number for communication with the peer registry server
+- `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration. When disabled, clients must manually enter the ips of their peers. Takes values of 0 (disabled) or 1 (enabled).
+- `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay. Takes values of 0 (disabled) or 1 (enabled).
+- `MOCK_NETWORK_DELAY`: The amount of time the simulated delay should last for. Value should be provided in seconds.
 
 As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below.
 
