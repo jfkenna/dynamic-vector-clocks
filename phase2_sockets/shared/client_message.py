@@ -3,6 +3,7 @@ import json
 import copy
 import uuid
 
+#************************************************************
 #message types for p2p communication
 class MessageType(IntEnum):
     BROADCAST_MESSAGE = 0
@@ -18,7 +19,7 @@ def messageToJson(message):
     return json.dumps(message)
 
 #parses message and returns dictionary representing message content
-#returns none if parse failed
+#returns None if parse failed
 def parseJsonMessage(message, requiredFields, useClientDefaults = False):
     try:
         parsedMessage = json.loads(message)

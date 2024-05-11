@@ -1,6 +1,12 @@
 from dotenv import dotenv_values
 import socket
 
+#************************************************************
+#.env helpers
+
+#validates .env file contains all required fields
+#and checks ports fall within valid range
+#returns True if validation failed, False otherwise
 def validateEnv(env, requiredFields):
     for required in requiredFields:
         if required not in env:
@@ -17,6 +23,8 @@ def validateEnv(env, requiredFields):
     return True
 
 
+#loads params from .env file and command line args
+#terminates program if too few args are provided or validation fails
 def loadArgsAndEnvClient(argv):
     #handle .env as global variable
     #parse and validate, then call main()
@@ -52,6 +60,10 @@ def loadArgsAndEnvClient(argv):
             env['THROTTLED_IP'] = argv[2]
     return env
  
+
+
+#************************************************************
+#User input helpers
 
 #prompts user to manually enter a list of peers
 #returns all peers whose hostname could be resolved

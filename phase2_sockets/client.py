@@ -371,12 +371,13 @@ def sayHello(peers, outgoingMessageQueue):
 
 #************************************************************
 #App
-#sets env and launches threads / gui
+
+#handles param setup and starts threads / gui
 def main():
 
     #messages that have been read from a socket and need to be handled
-    #hasAlreadyBeenHeldBack is only used for simulating network delay
     #[(networkEntry, message, hasAlreadyBeenHeldBack)]
+    #hasAlreadyBeenHeldBack is only used for simulating network delay
     messagesToHandle = Queue()
 
     #messages that need to be broadcast
@@ -386,7 +387,7 @@ def main():
     #message ids that we've already received
     receivedMessages = {}
 
-    #ids of messages whose receipt we've delayed (ONLY USED TO SIMULATE NETWORK DELAY)
+    #ids of messages whose receipt we've delayed (only used for simulating network delay)
     delayedMessages = {}
 
     #get peers from peer server or command line based on params
@@ -459,7 +460,6 @@ def main():
         readWorkers[i].start()
 
     #setup listener
-    #for now, only use ipv4 - can swap to V6 fairly easily later if we want to
     acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     acceptSocket.bind((env['CLIENT_LISTEN_IP'], int(env['PROTOCOL_PORT'])))
     acceptSocket.listen()
@@ -532,7 +532,7 @@ preInitialisedLock = Lock() #lock for pre-initialisation message queue
 selectorLock = Lock()
 
 #vector clock locks
-vectorClockLock = Lock() #lock for checking for message deliverability
+vectorClockLock = Lock()
 
 #************************************************************
 #events
@@ -552,8 +552,8 @@ initiallyUnconnected = Event()
 
 processIp = env['CLIENT_LISTEN_IP']
 processId = str(uuid.uuid4())
-# This process's vector clock - initialised with its own ip i.e 
-# [ [127.0.0.XX, 0] ]
+# This process's vector clock - initialised with a UUID e.g.
+# [ [FAKE-UUID-EXAMPLE-STRING, 0] ]
 processVectorClock = [[processId, 0]]
 processMessageQueue = []
 

@@ -1,6 +1,7 @@
 from enum import IntEnum
 import uuid
 
+#************************************************************
 #message types for client-server communication
 class RegistryMessageType(IntEnum):
     GET_PEERS = 0

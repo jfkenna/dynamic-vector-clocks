@@ -3,14 +3,15 @@ import socket
 from threading import Lock
 
 
-#************************************************************
-#messages
-
 #All messages sent by the system follow the following format:
 
 #|SIZE                           |TYPE                                |DESCRIPTION
 #|4 bytes (platform independent) |Fixed width big-endian encoded long |Represents length of message content in bytes
 #|variable length                |utf-8 encoded byte string           |Message content
+
+
+#************************************************************
+#message helpers
 
 #attaches a fixed width size header to start of message 
 def prependContentLengthHeader(encodedMessage):
@@ -84,7 +85,8 @@ def continueRead(networkEntry, messageQueue):
 
 #read helper used for communication with registry server
 #reads from a socket until a single message is consumed, then returns the message
-#NOT SAFE IF MULTIPLE MESSAGES ARE BEING SENT THROUGH THE SOCKET
+#returns the consumed message, or None if the connection closed
+#NOTE: UNSAFE TO USE IF MULTIPLE MESSAGES ARE BEING SENT THROUGH THE SOCKET
 def readSingleMessage(connection):
     headerSize = struct.calcsize('!l')
     contentLength = None
@@ -110,6 +112,7 @@ def readSingleMessage(connection):
 
 
 #helper for sending a single message to a single socket
+#returns True if the send failed, False otherwise
 def sendToSingleAdr(message, connectedSocket):
     try:
         sendWithHeaderAndEncoding(connectedSocket, message)
