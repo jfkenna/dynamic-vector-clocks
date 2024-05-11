@@ -119,7 +119,7 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers):
 
 #worker thread for controlling message flow and responding to HELLO/HELLO_RESPONSE messages
 #passes off rebroadcast tasks to the broadcast worker
-def handlerWorker(messagesToHandle, receivedMessages, delayedMessages, outgoingMessageQueue, peers):
+def handlerWorker(messagesToHandle, receivedMessages, delayedMessages, outgoingMessageQueue, peers, preInitialisedReceivedMessages):
     while True:
         if shutdownFlag.is_set():
             return
@@ -144,24 +144,24 @@ def handlerWorker(messagesToHandle, receivedMessages, delayedMessages, outgoingM
                     #if we haven't held the message back before, create a new thread
                     #to re-add it back to messages after some time has passed
                     if messageInfo[2] == False:
-                        #don't queue up the rebroadcasts
-                        if delayedMessages.get(message['id'], None) == None:
-                            print('[INFO] Delaying delivery of message: {0}'.format(message['text']))
-                            def delayedDeliveryCallback(messageInfo, messagesToHandle):
-                                time.sleep(int(env['MOCK_NETWORK_DELAY']))
-                                messagesToHandle.put((messageInfo[0], messageInfo[1], True))
-                            delayedDeliveryThread = Thread(target=delayedDeliveryCallback, args=(messageInfo, messagesToHandle,))
-                            delayedDeliveryThread.start()
-                            delayedMessages[message['id']] = True
+                        with delayedMessageLock:
+                            if delayedMessages.get(message['id'], None) == None:
+                                delayedMessages[message['id']] = True
+                                print('[INFO] Delaying delivery of message: {0}'.format(message['text']))
+                                def delayedDeliveryCallback(messageInfo, messagesToHandle):
+                                    time.sleep(int(env['MOCK_NETWORK_DELAY']))
+                                    messagesToHandle.put((messageInfo[0], messageInfo[1], True))
+                                delayedDeliveryThread = Thread(target=delayedDeliveryCallback, args=(messageInfo, messagesToHandle,))
+                                delayedDeliveryThread.start()
                         continue
             except socket.error:
                 continue
 
         #handle messages
         if message['type'] == MessageType.HELLO:
-            handleHello(peerNetworkData, message, peers)
+            handleHello(peerNetworkData, message, peers, preInitialisedReceivedMessages)
         if message['type'] == MessageType.HELLO_RESPONSE:
-            handleHelloResponse(peerNetworkData, message)
+            handleHelloResponse(peerNetworkData, message, preInitialisedReceivedMessages)
         if message['type'] == MessageType.BROADCAST_MESSAGE:
             handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue)
         if message == None:
@@ -172,7 +172,7 @@ def handlerWorker(messagesToHandle, receivedMessages, delayedMessages, outgoingM
 #Message handlers
 
 #reply to hello messages with copy of own state
-def handleHello(networkEntry, message, peers):
+def handleHello(networkEntry, message, peers, preInitialisedReceivedMessages):
     global processVectorClock
     global processMessageQueue
 
@@ -193,7 +193,8 @@ def handleHello(networkEntry, message, peers):
     #case where we provide clone data as an unconnected, uninitialized peer
     if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
         with vectorClockLock:
-            emptyHelloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, preInitialisedReceivedMessages))
+            with preInitialisedLock:
+                emptyHelloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, preInitialisedReceivedMessages))
         
         with networkEntry['lock']:
             if sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
@@ -203,7 +204,8 @@ def handleHello(networkEntry, message, peers):
         
         #initialise after sending peer data
         with vectorClockLock:
-            processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
+            with preInitialisedLock:
+                processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
         print('[INFO] Initialised with clock {0}'.format(processVectorClock))
         register()
         initialisationComplete.set()
@@ -222,7 +224,7 @@ def handleHello(networkEntry, message, peers):
 
 #consume hello response to build initial peer state
 #once complete, process is an exact clone of another peer's previous state
-def handleHelloResponse(networkEntry, message):
+def handleHelloResponse(networkEntry, message, preInitialisedReceivedMessages):
     global processVectorClock
     global processMessageQueue
 
@@ -233,8 +235,8 @@ def handleHelloResponse(networkEntry, message):
 
     #join messages we captured prior to initialisation with the undelivered messages
     #received from the cloned processes
-    with preInitialisedLock:
-        with vectorClockLock:
+    with vectorClockLock:
+        with preInitialisedLock:
             processMessageQueue = message['undeliveredMessages'] + preInitialisedReceivedMessages
             joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
             processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
@@ -375,6 +377,8 @@ def sayHello(peers, outgoingMessageQueue):
 #handles param setup and starts threads / gui
 def main():
 
+    #setup shared fields
+
     #messages that have been read from a socket and need to be handled
     #[(networkEntry, message, hasAlreadyBeenHeldBack)]
     #hasAlreadyBeenHeldBack is only used for simulating network delay
@@ -386,6 +390,10 @@ def main():
     
     #message ids that we've already received
     receivedMessages = {}
+
+    #initial message collector, stores messages that arrive before HELLO_RESPONSE arrives
+    #ensures no messages are missed even if the channel is not FIFO
+    preInitialisedReceivedMessages = []
 
     #ids of messages whose receipt we've delayed (only used for simulating network delay)
     delayedMessages = {}
@@ -452,7 +460,8 @@ def main():
     readWorkers = []
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers)))
-        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, delayedMessages, outgoingMessageQueue, peers, )))
+        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, 
+            delayedMessages, outgoingMessageQueue, peers, preInitialisedReceivedMessages)))
         readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, peers, )))
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers[i].start()
@@ -514,14 +523,11 @@ print('App configuration (.env + argv):', json.dumps(dict(env), indent=4))
 #maps a peer --> object containing peer socket, socket lock, current message size, read buffer
 networkEntries = {}
 
-#initial message collector, stores edge case messages that arrive before HELLO_RESPONSE arrives
-preInitialisedReceivedMessages = []
-
 #read socket selector
 selector = selectors.DefaultSelector()
 
 #************************************************************
-#locks
+#global locks for thread synchronisation
 
 #p2p state locks
 peersLock = Lock() #lock for peers list
@@ -531,8 +537,11 @@ preInitialisedLock = Lock() #lock for pre-initialisation message queue
 #lock for socket selector (used to select next READABLE socket)
 selectorLock = Lock()
 
-#vector clock locks
+#lock for incrementing and reading vector clock
 vectorClockLock = Lock()
+
+#lock for accessing delayed message dict - only used for simulating network delay
+delayedMessageLock = Lock()
 
 #************************************************************
 #events
