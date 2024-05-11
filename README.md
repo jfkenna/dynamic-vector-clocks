@@ -152,15 +152,18 @@ All messages sent in the system consist of a "message length" represented as a f
 
 ### Invocation - Socket Implementation
 
+Our application works on the premise that new peers can join the system at any given time, whether that's by making use of a central peer registry server; or by manually keying in the addresses of peers. We provide instructions for both cases below.
+
 #### .env parameters
-- `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will utilise.
+
+Before continuing, make sure you have provided values for the following .env params:  
+
+- `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will use.
 - `PROTOCOL_PORT`: The port number that a client/peer will use for p2p communication
-- `REGISTRY_PROTOCOL_PORT`: The port number for communication with the peer registry server
-- `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration. When disabled, clients must manually enter the ips of their peers. Takes values of 0 (disabled) or 1 (enabled).
+- `REGISTRY_PROTOCOL_PORT`: The port number used for communication with the peer registry server
+- `ENABLE_PEER_SERVER`: Whether to enable the peer registry server. When disabled, clients must manually enter the ips of their peers. Takes values of 0 (disabled) or 1 (enabled).
 - `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay. Takes values of 0 (disabled) or 1 (enabled).
 - `MOCK_NETWORK_DELAY`: The amount of time the simulated delay should last for. Value should be provided in seconds.
-
-As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below.
 
 **Note:** For macOS users, the extension of the local loopback IP addresses beyond `127.0.0.1` may be required. If running Phase 2 on a macOS based machine, ensure that additional IPs beyond this address is able to be set.
 
