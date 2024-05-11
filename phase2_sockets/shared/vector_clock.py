@@ -39,9 +39,8 @@ def obtainIndexOfUuid(clock, uuid):
 
 def deliverMessage(processVectorClock, message, processId, uiUpdater):
     # Print out the message
-    senderName = 'You' if (message['sender'] == processId) else message['sender']
-    print('[{0}]: {1}'.format(senderName, message['text']))
-    uiUpdater(message['sender'], message['text'])
+    senderName = 'You' if (message['sender'] == processId) else message['senderIp']
+    uiUpdater(senderName, message['text'])
 
     # Merge VCs upon delivery
     messageVectorClock = message['clock']
@@ -49,8 +48,6 @@ def deliverMessage(processVectorClock, message, processId, uiUpdater):
     return newProcessVectorClock
 
 def canDeliver(processVectorClock, message):
-
-    print("My clock {0}, Message clock {1}".format(processVectorClock, message))
 
     delivarable = False
     # Variable setup

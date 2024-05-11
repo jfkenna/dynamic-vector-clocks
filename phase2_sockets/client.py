@@ -15,6 +15,7 @@ import sys
 import time
 import selectors
 import copy
+import json
 
 #************************************************************
 #Worker threads
@@ -22,7 +23,6 @@ import copy
 #worker thread for accepting incoming connections
 #creates new network entries representing the connection
 def acceptWorker(serverSocket, peers):
-    print('[a0] Started')
     serverSocket.settimeout(0.1)
     while True:
         if shutdownFlag.is_set():
@@ -79,7 +79,6 @@ def readWorker(messagesToHandle, peers):
 #used for sending own messages, and for rebroadcasting messages from other peers
 def broadcastWorker(outgoingMessageQueue, receivedMessages, peers):
     global processVectorClock 
-    print('[s0] Started')
 
     #pass in queue once GUI is ready for binding
     while True:
@@ -129,7 +128,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
 
         message = parseJsonMessage(messageInfo[1], [], True)
         if message == None:
-            print("Got bad message")
+            print("[ERR] Got bad message")
             continue
 
         peerNetworkData = messageInfo[0]
@@ -143,7 +142,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
                     #if we haven't held the message back before, create a new thread
                     #to re-add it back to messages after some time has passed
                     if messageInfo[2] == False:
-                        print('Delaying delivery of message: {0}'.format(message))
+                        print('[INFO] Delaying delivery of message: {0}'.format(message['text']))
                         def delayedDeliveryCallback(messageInfo, messagesToHandle):
                             time.sleep(int(env['MOCK_NETWORK_DELAY']))
                             messagesToHandle.put((messageInfo[0], messageInfo[1], True))
@@ -161,7 +160,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
         if message['type'] == MessageType.BROADCAST_MESSAGE:
             handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue)
         if message == None:
-            print('[w{0}] Parse error'.format(id))
+            print('[ERR] Parse error'.format(id))
             continue
 
 #************************************************************
@@ -176,7 +175,7 @@ def handleHello(networkEntry, message):
     #this allows the first connection to be made
     #this scenario can only occur if the hostname of a node that was launched no connections is provided as peer
     if (not initialisationComplete.is_set()) and (not initiallyUnconnected.is_set()):
-        print('A process attempted to clone this node before it was initialized')
+        print('[ERR] A process attempted to clone this node before it was initialized')
         return
     
     try:
@@ -194,11 +193,12 @@ def handleHello(networkEntry, message):
         with networkEntry['lock']:
             if sendToSingleAdr(emptyHelloResponse, networkEntry['connection']):
                 handlePeerFailure(peer, peers)
-                print('Failed to send clone data to peer. Remaining unitialised')
+                print('[ERR] Failed to send clone data to peer. Remaining unitialised')
                 return
         
         #initialise after sending peer data
-        processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI) #TODO double check if necessary for this empty case
+        processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
+        print('[INFO] Initialised with clock {0}'.format(processVectorClock))
         registerAndCompleteInitialisation()
         return
 
@@ -209,7 +209,7 @@ def handleHello(networkEntry, message):
     with networkEntry['lock']:
         if sendToSingleAdr(helloResponse, networkEntry['connection']):
             handlePeerFailure(peer, peers)
-            print('Failed to send clone data to peer')
+            print('[ERR] Failed to send clone data to peer')
             return
 
 
@@ -223,7 +223,6 @@ def handleHelloResponse(networkEntry, message):
     if initialisationComplete.is_set():
         return
     
-    print('received clock: ', message['clock'])
 
     #join messages we captured prior to initialisation with the undelivered messages
     #received from the cloned processes
@@ -231,7 +230,7 @@ def handleHelloResponse(networkEntry, message):
         processMessageQueue = message['undeliveredMessages'] + preInitialisedReceivedMessages
         joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
         processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
-        print('clock after clone completes: ', processVectorClock)
+        print('[INFO] Initialised with clock {0}'.format(processVectorClock))
         registerAndCompleteInitialisation()
     
 
@@ -313,14 +312,15 @@ def handlePeerFailure(peer, peers):
         updateLivePeerCountGUI(remainingPeers)
 
         #If there was some point in time where we were not connected to any peers
-        #we might have missed a message, so all messages that were causally linked to that message
-        #can never be delivered. Flag to the user that we may be in that state, so they can make the
-        #decision to restart or not.
+        #we might have missed all broadcasts of a message, so all messages that were causally linked to that message
+        #can never be delivered. It's important to flag to the user that we may be in that state
+        #so they know that it's possible they may never receive another message, and can decide to restart.
         #
         #In a real application, it would make sense to shut the app completely
         #but as this is a demo, it's better to show we are able to detect this type of failure
         if remainingPeers == 0:
             statusUpdateGUI('NEW MESSAGES MAY NOT HAVE BEEN RECEIVED', True)
+            print('[INFO] Temporarily severed from all peers - future received messages may be undeliverable')
 
 
 #************************************************************
@@ -334,15 +334,14 @@ def registerAndCompleteInitialisation():
         try:
             serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
         except:
-            print('Registration failed due to issues resolving the registry server hostname')
-            print('Your peers will need to add you manually.')
+            print('[ERR] Couldn\'t resolve registry server hostname. Your peers will need to add you manually.')
 
         registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
         senderSocket = buildSenderSocket()
 
         #TODO MAKE SENDER SOCKET ACTUALLY CONNECT TO THE SERVER, RN ITS JUST AN UNCONNECTED SOCKET
         if sendToSingleAdr(registerMessage, senderSocket):
-            print('Failed to register with registry server. Your peers will need to add you manually.')
+            print('[ERR] Failed to register with registry server. Your peers will need to add you manually.')
     initialisationComplete.set()
 
 
@@ -354,7 +353,16 @@ def sayHello(peers, outgoingMessageQueue):
 
 
 #************************************************************
+
+#print helper
+def printAndExit(message):
+    print('[ERR] ' + message)
+    print('exiting...')
+    exit()
+
+
 #App
+#setup env and launch threads / gui
 def main():
 
     #messages that have been read from a socket and need to be handled
@@ -375,41 +383,34 @@ def main():
         try:
             serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
         except:
-            print('Failed to resolve registry server hostname')
-            print('exiting...')
-            exit()
+            printAndExit('Failed to resolve registry server hostname')
 
-        print('Retrieving peers from registry server...')
+        print('[INFO] Retrieving peers from registry server...')
         getPeerMessage = messageToJson(constructBasicMessage(RegistryMessageType.GET_PEERS))
         senderSocket = buildSenderSocket()
         if sendToSingleAdr(getPeerMessage, senderSocket):
-            print('Failed to get peers from registry server')
-            print('exiting...')
-            exit()
+            printAndExit('Failed to get peers from registry server')
 
         try:
             peerResponse = readSingleMessage(senderSocket)
             if peerResponse == None:
-                print('Failed to get peer from registry server')
-                print('exiting...')
-                exit()
+                printAndExit('Failed to get peer from registry server')
         except socket.error:
-            print('Failed to get peer from registry server')
-            print('exiting...')
-            exit()
+            printAndExit('Failed to get peer from registry server')
 
         silentFailureClose(senderSocket)
         
         peerData = parseJsonMessage(peerResponse, ['peers', 'type'])
         if peerData == None or peerData['type'] != RegistryMessageType.PEER_RESPONSE:
-            print('Registry responded with an invalid message')
-            print('exiting...')
-            exit()
+            printAndExit('Registry responded with an invalid message')
+
         unconnectedPeers = peerData['peers']
-        print('Received peers from registry: ', unconnectedPeers)
-        if (len(unconnectedPeers) == 0):
-            print('Registry had no peers, registering self')
+        
+        if len(unconnectedPeers) == 0:
+            print('[INFO] Registry had no peers, registering self')
             registerAndCompleteInitialisation()
+        else:
+            print('[INFO] Received peers from registry: ', unconnectedPeers)
     else:
         unconnectedPeers = getPeerNames()
     
@@ -423,11 +424,11 @@ def main():
             peers.append(peer)
             selector.register(p2pSocket, selectors.EVENT_READ, None)
         except socket.error:
-            print('Could not establish connection for peer {0}'.format(peer))
-            print('Proceeding without it')
+            print('[ERR] Could not establish connection for peer {0}'.format(peer))
+            print('[INFO] Removing it from the startup peer list')
 
     if len(peers) == 0:
-        print('STARTED WITH NO PEERS')
+        print('[INFO] Starting with no peers - waiting for at least one peer to establish connection...')
         initiallyUnconnected.set()
     
     #create worker threads
@@ -448,8 +449,7 @@ def main():
     acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     acceptSocket.bind((env['CLIENT_LISTEN_IP'], int(env['PROTOCOL_PORT'])))
     acceptSocket.listen()
-    print('Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
-    print("Process ID is", processId)
+    print('[INFO] Client listening at {0} on port {1}'.format(env['CLIENT_LISTEN_IP'], env['PROTOCOL_PORT']))
     acceptThread = Thread(target=acceptWorker, args=(acceptSocket, peers))
     acceptThread.start()
 
@@ -457,32 +457,30 @@ def main():
     #clone state of some other node in the network as own initial state
     if len(peers) > 0:
         sayHello(peers, outgoingMessageQueue)
-        print('connecting to the network, please wait...')
-    else:
-        print('waiting for at least one other peer to establish connection...')
+        print('[INFO] Connecting to the network, please wait...')
 
     #don't start the GUI until hello completes
     while not initialisationComplete.is_set():
         time.sleep(0.1)
 
     #start GUI from template file
-    Builder.load_file('layout.kv')
+    Builder.load_file('GUI.kv')
     GUI(title='CHAT CLIENT [{0}]'.format(env['CLIENT_LISTEN_IP'])).run()
 
-    print('GUI closed, terminating threads...')
+    print('[INFO] GUI closed, terminating threads...')
     shutdownFlag.set()
     for worker in broadcastWorkers:
         worker.join()
-    print('joined broadcasters...')
+    print('[INFO] Joined broadcasters...')
     for worker in readWorkers:
         worker.join()
-    print('joined readers...')
+    print('[INFO] Joined readers...')
     for worker in handlerWorkers:
         worker.join()
-    print('joined handlers...')
+    print('[INFO] Joined handlers...')
     acceptThread.join()
     silentFailureClose(acceptSocket)
-    print('all threads closed... exiting...')
+    print('[INFO] All threads closed... exiting...')
     
 
 
@@ -490,7 +488,7 @@ def main():
 #setup env
 
 env = loadArgsAndEnvClient(sys.argv)
-print('Combined env and argv config:', dict(env))
+print('App configuration (.env + argv):', json.dumps(dict(env), indent=4))
 
 #************************************************************
 #state
