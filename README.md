@@ -102,28 +102,38 @@ Unlinke the known quantity and expected send/receives of processes in the first 
 
 True to causality - if there's a network partition at one of the peers - or perhaps that peer itself is under heavy load; it _may_ receive messages out-of-order akin to the examples shown in Phase 1. The DVC algorithm integrated with this part of our project will ensure that messages queued are sent in causal ordering. 
 
-### Implementation
+### Implementation Overview
 
-The process of Phase 2's implementations is based as follows:
-1. Based on the local `dotenv` file (`.env`) within the `/phase2_sockets` directory - peers can elect to join the network based two main scenarios. The options are where peers elect to chat _without_ a central peer registry server handling automatic peer registration/deregistration within the network, or _with_ the server enabled (**started previously**) - which will automatically connect pre-registered peers together. This is set through the `ENABLE_PEER_SERVER` variable as above. <br/> Other environment variables are exposed in the `.env` file; namely the following:
-    - `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will utilise.
-    - `PROTOCOL_PORT`: The port number that a client/peer will utilise for connecting to others.
-    - `REGISTRY_PROTOCOL_PORT`: The peer registry server's port number it will utilise.
-    - `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration. Takes values of 0 (disabled) or 1 (enabled).
-    - `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay. Takes values of 0 (disabled) or 1 (enabled).
-    - `MOCK_NETWORK_DELAY`: The amount of time the simulated delay should last for. Value should be provided in seconds.
-2.  - When `ENABLE_PEER_SERVER` is set as `0`: peers will need to specify each peer they would like to connect with on joining the network. Once they're done, they'll need to specifying `f` or `finished` to connect to the network. 
-    - When `ENABLE_PEER_SERVER` is set as `1`: peers will connect with the central server that has been started at a specific IP address. The connecting peer will try to fetch the peers from the server with a `RegistryMessageType.GET_PEERS`, which the server will reply with a `RegistryMessageType.PEER_RESPONSE` with a peer list. If they're the first peer connected, they'll register themselves to the server's peer list with a `RegistryMessageType.REGISTER_PEER` message to the server and then register themselves to the server via the internal `registerAndCompleteInitialisation` function. Otherwise - the connecting peer will broadcast a `MessageType.HELLO` to all the known peers. Each active peer thus returns a `MessageType.HELLO_RESPONSE` back to the registering peer. The connecting process then join messages captured prior to initialisation with any undelivered messages from the other processes - and then completes its registration by `registerAndCompleteInitialisation`.
-3. In the registration and peer startup process above - each peer constructs a `broadcastHandler` (for broadcasting and re-broadcasting messages to peers), a `readWorker` (for reading incoming messages from each peer connection), a `handlerWorker` that handles message delivery and the processing of `MessageType.HELLO` and `MessageType.HELLO_RESPONSE` messages, and a `acceptWorker` (for accepting connections from other peers).
-4. From both cases explained in #2 - peers will now have a Kivy window open for broadcasting messages to one another. Constructing a message in the presented input box will boradcast messages out via the `broadcastWorker` - where from Phase #1; a vector clock is affixed to the message for checking deliverability. Peers ingest this message from their own `handlerWorker` - where upon receiving a regular message that is not of the typed setup as explained above - will be checked for deliverability as Phase 1. If a message is able to be delivered, it is - otherwise it's put on the peers' `processMessageQueue` where they'll be attempted to be delivered upon another message arriving.
-5. Peers can disconnect/connect dynamically at this point: the registration process in #1 and #2 yields - as expected from realistic P2P chat applications that are used extensively today.
+#### Initial user input
+Based on the `ENABLE_PEER_SERVER` param, peers are either manually gathered from user input, or are fetched from the peer server.
+- When `ENABLE_PEER_SERVER` is set as `0`: peers will need to specify each peer they would like to connect with on joining the network. Once they're done, they'll need to specifying `f` or `finished` to connect to the network. 
+- When `ENABLE_PEER_SERVER` is set as `1`: peers will connect with the central server that has been started at a specific IP address. The connecting peer will try to fetch the peers from the server with a `RegistryMessageType.GET_PEERS`, which the server will reply with a `RegistryMessageType.PEER_RESPONSE` with a peer list. If they're the first peer connected, they'll register themselves to the server's peer list with a `RegistryMessageType.REGISTER_PEER` message to the server and then register themselves with the registry server.
 
-### Communication
+#### Initial peer setup (cloning)
+After peers are gathered, the client broadcasts a `MessageType.HELLO` to all known peers, and then begins collecting all received messages. Peers receiving a `MessageType.HELLO` reply to the requesting peer with a `MessageType.HELLO_RESPONSE` that contains their current clock and undelivered message queue. The requesting peer initialises its clock to match the first clock it receives. It then joins its message queue with the received message queue, and then delivers all deliverable messages from the queue. Once the clock and queue are setup, the peer is ready to chat and launches its GUI.
+
+#### Workers and data flow
+After gathering initial user input, the client starts the following worker threads:
+- `broadcastHandler`: for broadcasting and re-broadcasting messages to other peers
+- `readWorker`: for reading incoming messages from each peer connection
+- `handlerWorker`: for handling message delivery, and for processing `MessageType.HELLO` and `MessageType.HELLO_RESPONSE` messages
+- `acceptWorker`: for accepting new connections from other peers
+
+The `readWorker` continually performs non-blocking reads on any available readable sockets (i.e. sockets with non empty buffers), and passes any complete messages that are read to the handler's queue for processing.
+
+The handler worker continually takes messages from its queue. 
+- If the messages are `MessageType.BROADCAST_MESSAGE`, it rebroadcasts them and then attempts to deliver them (reliable broadcast, rebroadcast to all peers before delivering). Based on if the message's clock is deliverable at client's current clock state, the message is either immediately displayed in the UI, or queued in the `processMessageQueue` to be delivered once all casual predecessor messages have arrived.
+- If the messages are `MessageType.HELLO`'s or `MessageType.HELLO_RESPONSE`'s, it makes no attempt to rebroadcast them and instead replies directly to the requesting client with an appropriate response.
+
+When the send button is clicked in the Kivy GUI, the client's clock is updated, and then the message is stamped with the client's clock and added to the `broadcastHandler`'s queue, from which it is eventually taken and broadcast to other peers.
+
+
+#### Communication
 The client uses a connection based approach for p2p communication, with one socket opened for each peer and held open for the entire lifetime of the peer. All messages between the pair of peers are passed down the same connection stream. If a connection unexpectly closes or times out, that peer associated with that connection is considered to have failed and is removed from the client's list of peers. If all a client's peers have failed, then it displays a warning in the UI advising that future messages may fail to be delivered. A list of active peers is displayed in the top left of the GUI for user convenience.
 
 The choice of a stream based approach is important - if a connection-per-message approach were taken, it's possible a client could become temporarily disconnected from their peers and fail to receive a message (this failure would be silent, as a message based approach doesn't actively check if peers are still reachable). In such a case, if the connection later becomes stable, the client would never be able to receive the next messages sent by their peers, as they would still be 'waiting' for the dropped message to be delivered. Using a connection based approach prevents this silent failure by alerting the user when they have become severed from their peers.
 
-All messages sent in the system consist of a fixed width length, immediately followed by the message content (see below table for more details). Message content is a json that contains various fields depending on the message type.
+All messages sent in the system consist of a "message length" represented as a fixed width long, immediately followed by the actual message content (see below table for more details). Message content is a json that can contain a range of fields based on the message type.
 
 |SIZE                           |TYPE                                 |DESCRIPTION                                   |
 |-------------------------------|-------------------------------------|----------------------------------------------|
@@ -132,6 +142,15 @@ All messages sent in the system consist of a fixed width length, immediately fol
 
 
 ### Invocation
+
+#### .env parameters
+Based on the local `dotenv` file (`.env`) within the `/phase2_sockets` directory - peers can elect to join the network based two main scenarios. The options are where peers elect to chat _without_ a central peer registry server handling automatic peer registration/deregistration within the network, or _with_ the server enabled (**started previously**) - which will automatically connect pre-registered peers together. This is set through the `ENABLE_PEER_SERVER` variable as above. <br/> Other environment variables are exposed in the `.env` file; namely the following:
+    - `CLIENT_WORKER_THREADS`: the number of `broadcastHandler` / `readWorker` / `handlerWorker` threads a client will utilise.
+    - `PROTOCOL_PORT`: The port number that a client/peer will utilise for connecting to others.
+    - `REGISTRY_PROTOCOL_PORT`: The peer registry server's port number it will utilise.
+    - `ENABLE_PEER_SERVER`: Whether to enable the peer registry server to manage peer registration. Takes values of 0 (disabled) or 1 (enabled).
+    - `ENABLE_NETWORK_DELAY`: Whether to enable simulated networking delay. Takes values of 0 (disabled) or 1 (enabled).
+    - `MOCK_NETWORK_DELAY`: The amount of time the simulated delay should last for. Value should be provided in seconds.
 
 As explained in [the implementation phase](#implementation-1), the P2P message application developed for our real-world example of Dynamic Vector Clocks works on the premise that _multiple_ peers will be joining the system at any given time, whether thats utilising a central peer registry server; or without. Both cases are showcased below.
 
