@@ -169,6 +169,9 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
 
 #reply to hello messages with copy of own state
 def handleHello(networkEntry, message):
+    global processVectorClock
+    global processMessageQueue
+
     #allow other nodes to initialise by cloning a node with no peers
     #this allows the first connection to be made
     #this scenario can only occur if the hostname of a node that was launched no connections is provided as peer
@@ -195,7 +198,7 @@ def handleHello(networkEntry, message):
                 return
         
         #initialise after sending peer data
-        handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI) #TODO double check if necessary for this empty case
+        processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI) #TODO double check if necessary for this empty case
         registerAndCompleteInitialisation()
         return
 
@@ -213,18 +216,22 @@ def handleHello(networkEntry, message):
 #consume hello response to build initial peer state
 #once complete, process is an exact clone of another peer's previous state
 def handleHelloResponse(networkEntry, message):
+    global processVectorClock
+    global processMessageQueue
+
     #discard message if we have already cloned a process
     if initialisationComplete.is_set():
         return
+    
+    print('received clock: ', message['clock'])
 
     #join messages we captured prior to initialisation with the undelivered messages
     #received from the cloned processes
     with preInitialisedLock:
-        processVectorClock = message['clock']
-        clonedMessages = message['undeliveredMessages']
-        clonedMessages = clonedMessages + preInitialisedReceivedMessages
-        processMessageQueue = clonedMessages
-        handleMessageQueue(processVectorClock, processMessageQueue, None)
+        processMessageQueue = message['undeliveredMessages'] + preInitialisedReceivedMessages
+        joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
+        processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
+        print('clock after clone completes: ', processVectorClock)
         registerAndCompleteInitialisation()
     
 
@@ -342,8 +349,8 @@ def registerAndCompleteInitialisation():
 #helper, enqueues the node's initial HELLO message
 def sayHello(peers, outgoingMessageQueue):
     helloMessage = messageToJson(constructHello(processId, processIp))
-    outgoingMessageQueue.put(helloMessage)
-    registerAndCompleteInitialisation() #TODO - STOP INITIALISATION UNTIL HELLO COMPLETES
+    #directly broadcast rather than adding to send queue, as the p2p send worker won't start until hello is complete
+    broadcastToPeers(helloMessage, peers)
 
 
 #************************************************************
