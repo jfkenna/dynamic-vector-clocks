@@ -33,9 +33,22 @@ def sendWithHeaderAndEncoding(connection, message):
 
 #reads a fixed block of data from a peer's connection and adds any complete messages to the message queue
 #not guaranteed to read a complete message - may need multiple invocations to build up the full message
+#returns True if an error occurred during the read attempt, False otherwise
 def continueRead(networkEntry, messageQueue):
     headerSize = struct.calcsize('!l')
-    data = networkEntry['connection'].recv(2048)
+
+    try:
+        data = networkEntry['connection'].recv(2048)
+    except socket.error as err:
+
+        #nothing in socket currently available to read (nonblocking socket)
+        #return False, as not a true failure
+        if (err.errno == 11):
+            return False
+        else:
+            #all other error codes indicate a genuine error must have occurred
+            print('[ERR] Error reading from', networkEntry['connection'], err)
+            return True
 
     if not data or len(data) == 0:
         return True

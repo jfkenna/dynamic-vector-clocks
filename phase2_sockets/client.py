@@ -48,31 +48,33 @@ def readWorker(messagesToHandle, peers):
     while True:
         if shutdownFlag.is_set():
             return
-        selectResult = selector.select(timeout=0.1)
-        if selectResult == []:
+
+        #safely take the next readable socket
+        with selectorLock:
+            selectResult = selector.select(timeout=0.1)
+            if selectResult == []:
+                continue
+            readableSocket = selectResult[0][0].fileobj
+            selector.unregister(readableSocket)
+            
+        #avoid crash if socket has already closed
+        try:
+            peer = readableSocket.getpeername()[0]
+        except socket.error:
+            continue
+        networkEntry = networkEntries.get(peer, None)
+        if networkEntry == None:
             continue
 
-        #https://docs.python.org/3/library/selectors.html
-        for key, mask in selectResult:
-            if shutdownFlag.is_set():
-                return
-            
-            readableSocket = key.fileobj
-            #avoid crash if socket has already closed
-            try:
-                peer = readableSocket.getpeername()[0]
-            except socket.error:
-                continue
+        #read available messages
+        with networkEntry['lock']:
+            readfailed = continueRead(networkEntry, messagesToHandle)
 
-            networkEntry = networkEntries.get(peer, None)
-            if networkEntry == None:
-                continue
-
-            #read available messages
-            with networkEntry['lock']:
-                readfailed = continueRead(networkEntry, messagesToHandle)
-            if readfailed:
-                handlePeerFailure(peer, peers)
+        #add socket back to selector if read didn't error out
+        if readfailed:
+            handlePeerFailure(peer, peers)
+        else:
+            selector.register(readableSocket, selectors.EVENT_READ, None)
                 
 
 #worker thread for broadcasting enqueued messages
@@ -117,7 +119,7 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers):
 
 #worker thread for controlling message flow and responding to HELLO/HELLO_RESPONSE messages
 #passes off rebroadcast tasks to the broadcast worker
-def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
+def handlerWorker(messagesToHandle, receivedMessages, delayedMessages, outgoingMessageQueue, peers):
     while True:
         if shutdownFlag.is_set():
             return
@@ -142,19 +144,22 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
                     #if we haven't held the message back before, create a new thread
                     #to re-add it back to messages after some time has passed
                     if messageInfo[2] == False:
-                        print('[INFO] Delaying delivery of message: {0}'.format(message['text']))
-                        def delayedDeliveryCallback(messageInfo, messagesToHandle):
-                            time.sleep(int(env['MOCK_NETWORK_DELAY']))
-                            messagesToHandle.put((messageInfo[0], messageInfo[1], True))
-                        delayedDeliveryThread = Thread(target=delayedDeliveryCallback, args=(messageInfo, messagesToHandle,))
-                        delayedDeliveryThread.start()
+                        #don't queue up the rebroadcasts
+                        if delayedMessages.get(message['id'], None) == None:
+                            print('[INFO] Delaying delivery of message: {0}'.format(message['text']))
+                            def delayedDeliveryCallback(messageInfo, messagesToHandle):
+                                time.sleep(int(env['MOCK_NETWORK_DELAY']))
+                                messagesToHandle.put((messageInfo[0], messageInfo[1], True))
+                            delayedDeliveryThread = Thread(target=delayedDeliveryCallback, args=(messageInfo, messagesToHandle,))
+                            delayedDeliveryThread.start()
+                            delayedMessages[message['id']] = True
                         continue
             except socket.error:
                 continue
 
         #handle messages
         if message['type'] == MessageType.HELLO:
-            handleHello(peerNetworkData, message)
+            handleHello(peerNetworkData, message, peers)
         if message['type'] == MessageType.HELLO_RESPONSE:
             handleHelloResponse(peerNetworkData, message)
         if message['type'] == MessageType.BROADCAST_MESSAGE:
@@ -167,7 +172,7 @@ def handlerWorker(messagesToHandle, receivedMessages, outgoingMessageQueue):
 #Message handlers
 
 #reply to hello messages with copy of own state
-def handleHello(networkEntry, message):
+def handleHello(networkEntry, message, peers):
     global processVectorClock
     global processMessageQueue
 
@@ -302,11 +307,14 @@ def broadcastToPeers(message, peers):
 #helper, used to update peer list and network info when a peer's connection fails
 #if peers fall to 0, triggers the display of a warning message
 def handlePeerFailure(peer, peers):
+    print('[ERR] Connection with {0} failed. Removing from peer list'.format(peer))
     with peersLock:
-        connection = networkEntries[peer]['connection']
+        networkEntry = networkEntries.get(peer, None)
+        if networkEntry == None:
+            return
+        connection = networkEntry['connection']
         del networkEntries[peer]
         peers.remove(peer)
-        selector.unregister(connection)
         silentFailureClose(connection)
         remainingPeers = len(peers)
         updateLivePeerCountGUI(remainingPeers)
@@ -377,6 +385,9 @@ def main():
     #message ids that we've already received
     receivedMessages = {}
 
+    #ids of messages whose receipt we've delayed (ONLY USED TO SIMULATE NETWORK DELAY)
+    delayedMessages = {}
+
     #get peers from peer server or command line based on params
     #room for extension - add new peers at runtime based on received messages, so network is more fault tolerant
     if int(env['ENABLE_PEER_SERVER']) == 1:
@@ -437,7 +448,7 @@ def main():
     readWorkers = []
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers.append(Thread(target=broadcastWorker, args=(outgoingMessageQueue, receivedMessages, peers)))
-        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, outgoingMessageQueue, )))
+        handlerWorkers.append(Thread(target=handlerWorker, args=(messagesToHandle, receivedMessages, delayedMessages, outgoingMessageQueue, peers, )))
         readWorkers.append(Thread(target=readWorker, args=(messagesToHandle, peers, )))
     for i in range(int(env['CLIENT_WORKER_THREADS'])):
         broadcastWorkers[i].start()
@@ -509,6 +520,9 @@ selector = selectors.DefaultSelector()
 peersLock = Lock() #lock for peers list
 messageLock = Lock() #lock for received message dict
 preInitialisedLock = Lock() #lock for pre-initialisation message queue
+
+#lock for socket selector (used to select next READABLE socket)
+selectorLock = Lock()
 
 #vector clock locks
 deliverabilityLock = Lock() #lock for checking for message deliverability
