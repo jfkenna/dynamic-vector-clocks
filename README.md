@@ -2,9 +2,13 @@
 
 This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms - for Semetser 1, 2024.
 
-The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially -  **Matrix Clocks** were selected as the team's first choice of algorithm to implement; however the team ultimately decided to use **Dynamic Vector Clocks** due to the fact that the real-world application of a multi-tenant chat application primarily orients around broadcasting messages between peers - and additionally (most importantly), the dynamic nature of Dynamic Vector Clocks not needing to know how many peers are in the system initially. Furthermore, the _space_ that is required when storing Matrix Clocks far outweighs that of Dynamic Vector Clocks - which is better suited for this need.
+The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially, **Matrix Clocks** were selected as the team's first choice of algorithm to implement; with the aim of providing both unicast and broadcast causal delivery for chatting with a group of peers. However, we ultimately decided to use **Dynamic Vector Clocks**, for three main reasons:
 
-The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase built upon the base implementation of the algorithm within Python that was then referenced and implemented in the second. Each phase is described below - the design, approach and invocation of the algorithm within each.
+- Dynamic Vector Clocks can add new entries at runtime, while matrix clocks cannot - this is beneficial for chat apps, where users may want to join a chat midway through
+- Dynamic Vector Clocks have significantly reduced space complexity and network load when compared to Matrix Clocks (n entries vs n^2 entries)
+- We realised that the real-world applications of a chat application primarily orient around broadcasting messages between peers, rather than single peer to single peer communication, and noted that causal delivery for broadcasts is possible with both matrix and vector clocks - this meant that if we forced all messages to be broadcast only, we could gain all the benefits associated with the use of dynamic vector clocks.
+
+The repository consists of two main directories - `phase1_mpi` and `phase2_sockets`. The first phase provides an initial implementation of causal delivery with DVCs in python using MPI. The second phase extends this original implementation and uses the logic designed in phase one to build a peer to peer networked chat application in python. Invocation instructions and descriptions of the two phases are provided below.
 
 ## Phase 1 - `phase1_mpi`
 
