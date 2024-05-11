@@ -119,7 +119,7 @@ The process of Phase 2's implementations is based as follows:
 5. Peers can disconnect/connect dynamically at this point: the registration process in #1 and #2 yields - as expected from realistic P2P chat applications that are used extensively today.
 
 ### Communication
-The client uses a stream based approach for p2p communication, with one socket opened for each peer. All messages between the pair of peers are passed down the same stream. If a connection unexpectly closes or times out, tha peer is considered to have failed and is removed from the client's list of peers. If all a client's peers have failed, then it displays a warning in the UI advising that future messages may fail to be delivered. A list of active peers is displayed in the top left of the GUI for user convenience. 
+The client uses a connection based approach for p2p communication, with one socket opened for each peer and held open for the entire lifetime of the peer. All messages between the pair of peers are passed down the same connection stream. If a connection unexpectly closes or times out, that peer associated with that connection is considered to have failed and is removed from the client's list of peers. If all a client's peers have failed, then it displays a warning in the UI advising that future messages may fail to be delivered. A list of active peers is displayed in the top left of the GUI for user convenience.
 
 The choice of a stream based approach is important - if a connection-per-message approach were taken, it's possible a client could become temporarily disconnected from their peers and fail to receive a message (this failure would be silent, as a message based approach doesn't actively check if peers are still reachable). In such a case, if the connection later becomes stable, the client would never be able to receive the next messages sent by their peers, as they would still be 'waiting' for the dropped message to be delivered. Using a connection based approach prevents this silent failure by alerting the user when they have become severed from their peers.
 
@@ -144,53 +144,56 @@ Within a new terminal - clone the codebase (if not already done from phase 1) an
 From there - you'll need to invoke a new client/peer via `client.py` with a specific IP address that it should listen on. For example - below is starting up a client/peer with `127.0.0.1` as its listining IP:
 
 ```
-git clone git@gitlab.eng.unimelb.edu.au:jsammut/comp90020-double-j.git
-cd comp90020-double-j/phase1_mpi/
 python3 client.py 127.0.0.1
 ```
 
 The running client/peer will then start its respective workers; and then loop for other client/peer IPs/hostnames to connect to. Once completed with the respective client/peers - enter `f` or `finished`:
 
 ```
-╰─ python3 client.py 127.0.0.1
-[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-05_27.txt
+╰─ python client.py 127.0.0.1
+[INFO   ] [Logger      ] Record log in /home/joel/.kivy/logs/kivy_24-05-11_81.txt
 [INFO   ] [Kivy        ] v2.3.0
-[INFO   ] [Kivy        ] Installed at "/usr/local/lib/python3.12/site-packages/kivy/__init__.py"
-[INFO   ] [Python      ] v3.12.3 (main, Apr  9 2024, 08:09:14) [Clang 15.0.0 (clang-1500.3.9.4)]
-[INFO   ] [Python      ] Interpreter at "/usr/local/opt/python@3.12/bin/python3.12"
+[INFO   ] [Kivy        ] Installed at "/home/joel/miniconda3/lib/python3.12/site-packages/kivy/__init__.py"
+[INFO   ] [Python      ] v3.12.1 | packaged by Anaconda, Inc. | (main, Jan 19 2024, 15:51:05) [GCC 11.2.0]
+[INFO   ] [Python      ] Interpreter at "/home/joel/miniconda3/bin/python"
 [INFO   ] [Logger      ] Purge log fired. Processing...
 [INFO   ] [Logger      ] Purge finished!
 [INFO   ] [Factory     ] 195 symbols loaded
-[INFO   ] [Image       ] Providers: img_tex, img_imageio, img_dds, img_sdl2 (img_pil, img_ffpyplayer ignored)
+[INFO   ] [Image       ] Providers: img_tex, img_dds, img_sdl2, img_pil (img_ffpyplayer ignored)
 [INFO   ] [Text        ] Provider: sdl2
 [INFO   ] [Window      ] Provider: sdl2
-[INFO   ] [GL          ] Using the "OpenGL ES 2" graphics system
+[INFO   ] [GL          ] Using the "OpenGL" graphics system
 [INFO   ] [GL          ] Backend used <sdl2>
-[INFO   ] [GL          ] OpenGL version <b'2.1 ATI-5.5.17'>
-[INFO   ] [GL          ] OpenGL vendor <b'ATI Technologies Inc.'>
-[INFO   ] [GL          ] OpenGL renderer <b'AMD Radeon Pro 560X OpenGL Engine'>
-[INFO   ] [GL          ] OpenGL parsed version: 2, 1
-[INFO   ] [GL          ] Shading version <b'1.20'>
+[INFO   ] [GL          ] OpenGL version <b'4.6 (Compatibility Profile) Mesa 21.2.6'>
+[INFO   ] [GL          ] OpenGL vendor <b'AMD'>
+[INFO   ] [GL          ] OpenGL renderer <b'AMD Radeon RX 5700 XT (NAVI10, DRM 3.42.0, 5.15.0-105-generic, LLVM 12.0.0)'>
+[INFO   ] [GL          ] OpenGL parsed version: 4, 6
+[INFO   ] [GL          ] Shading version <b'4.60'>
 [INFO   ] [GL          ] Texture max size <16384>
-[INFO   ] [GL          ] Texture max units <16>
+[INFO   ] [GL          ] Texture max units <32>
 [INFO   ] [Window      ] auto add sdl2 input provider
 [INFO   ] [Window      ] virtual keyboard not allowed, single mode, not docked
-Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '0', 'ENABLE_NETWORK_DELAY': '1', 'MOCK_NETWORK_DELAY_MIN': '100', 'MOCK_NETWORK_DELAY_MAX': '2500', 'CLIENT_LISTEN_IP': '127.0.0.1'}
+App configuration (.env + argv): {
+    "CLIENT_WORKER_THREADS": "4",
+    "PROTOCOL_PORT": "9876",
+    "REGISTRY_PROTOCOL_PORT": "9877",
+    "ENABLE_PEER_SERVER": "0",
+    "ENABLE_NETWORK_DELAY": "0",
+    "MOCK_NETWORK_DELAY": "5",
+    "CLIENT_LISTEN_IP": "127.0.0.1"
+}
 Enter peer IPs/hostnames [enter 'finished' or 'f' to continue]
 Enter hostname: 127.0.0.2
 Added peer at 127.0.0.2
 Enter hostname: f
-Client listening at 127.0.0.1 on port 9876
-Process ID is 4ef09c8a-f962-48f4-a161-72f748201046
-[a0] Started
-[w0] Started
-[s0] Started
-Error connecting to adr: <class 'OSError'>
-Failed to broadcast message to any of our peers. We may be disconnected from the network...
-Failed to send HELLO message to any of our peers. Registering and starting with an empty clock
-connecting to the network, please wait...
+[INFO] Client listening at 127.0.0.1 on port 9876
+[INFO] Connecting to the network, please wait...
+[INFO] Initialised with clock [['5898c2b0-f1b1-42ca-9efe-8f5d16c5d87c', 0], ['93be79c8-91b4-4755-90c9-7542cb7729c9', 0]]
+[INFO   ] [Clipboard   ] Provider: xclip
+[INFO   ] [CutBuffer   ] cut buffer support enabled
 [INFO   ] [Base        ] Start application main loop
 [INFO   ] [GL          ] NPOT texture support is available
+
 ```
 
 Other clients/peers that wish to connect to the network will need to be connected in a similar fashion - and **with a different IP/hostname**. 
@@ -199,15 +202,33 @@ Upon a client/peer starting - a local Kivy window will appear where they can ent
 
 ![P2P Messaging App - Without a central peer registry server](/phase2_sockets/images/phase2-no-server.png){width=50%}
 
+#### With simulated network delay
+
+To simulate network delay for communication between processes, the following changes are required in the `.env` file.
+- `ENABLE_NETWORK_DELAY` should be set to `1`
+- `MOCK_NETWORK_DELAY` should be set to a reasonable delay. I found `5` allowed the delay to be clearly observed, without making me too impatient.
+
+The client can then be invoked as per the instructions for running without the peer registry server, except that an additional argument should be provided to specifiy the IP whose messages should be delayed. For instance, to run the client at `127.0.0.1` while simulate the delay of messages from `127.0.0.2`, use the following command:
+
+```
+cd comp90020-double-j/phase2_sockets/
+python3 client.py 127.0.0.1 127.0.0.2
+```
+
+I have found that the easiest way to test causal delivery is functioning as expected is as follows:
+1. Run a client at `127.0.0.1` and `127.0.0.2`, with both throttling some unused address (e.g. `127.0.0.99`)
+2. Run another client at `127.0.0.3` that delays messages from `127.0.0.1`. 
+3. You can then send a message from `127.0.0.1`, then send another from `127.0.0.2` once the first message is received.
+4. The client at `127.0.0.3` will not be able to receive the message from `127.0.0.2` until the delayed message from `127.0.0.1` is finally received, as `127.0.0.2`'s message is causally dependant on the delayed message.
+
+
 #### With a Peer Registry Server
 
 Within a new terminal - clone the codebase (if not already done from phase 1) and change the working directory to `/phase2_sockets`. Ensure that in the `.env` file, `ENABLE_PEER_SERVER` is set to `1` to enable the central peer registry server. You might want to also change its port via `REGISTRY_PROTOCOL_PORT` in `.env`
 
-From there - you'll need to start the server **first** by `server.py` with a specific IP address that it should should listen on. For example - below is starting up the server with `127.0.0.1` as its listining IP:
+From there - you'll need to start the server **first** by `server.py` with a specific IP address that it should should listen on. For example - below is starting up the server with `127.0.0.1` as its listening IP:
 
 ```
-git clone git@gitlab.eng.unimelb.edu.au:jsammut/comp90020-double-j.git
-cd comp90020-double-j/phase1_mpi/
 python3 server.py 127.0.0.1
 ```
 
@@ -227,41 +248,45 @@ python3 client.py 127.0.0.2 127.0.0.1
 Running the above will map this client/peer's IP: and based on if this is the first peer (or not) as explored in the [invocation](#invocation-1) section will either register with the server and await new client/peer connections - or say `hello` to all other client/peers (message merging) and then register itself with the server (and thus network). There is **no need** to specify IPs for other client/peers in this scenario - as this is the job of the server to direct to client/peers that join in at any time:
 
 ```
-╰─ python3 client.py 127.0.0.2 127.0.0.1
-[INFO   ] [Logger      ] Record log in /Users/juma/.kivy/logs/kivy_24-05-05_32.txt
+╰─ python client.py 127.0.0.2 127.0.0.1
+[INFO   ] [Logger      ] Record log in /home/joel/.kivy/logs/kivy_24-05-11_83.txt
 [INFO   ] [Kivy        ] v2.3.0
-[INFO   ] [Kivy        ] Installed at "/usr/local/lib/python3.12/site-packages/kivy/__init__.py"
-[INFO   ] [Python      ] v3.12.3 (main, Apr  9 2024, 08:09:14) [Clang 15.0.0 (clang-1500.3.9.4)]
-[INFO   ] [Python      ] Interpreter at "/usr/local/opt/python@3.12/bin/python3.12"
+[INFO   ] [Kivy        ] Installed at "/home/joel/miniconda3/lib/python3.12/site-packages/kivy/__init__.py"
+[INFO   ] [Python      ] v3.12.1 | packaged by Anaconda, Inc. | (main, Jan 19 2024, 15:51:05) [GCC 11.2.0]
+[INFO   ] [Python      ] Interpreter at "/home/joel/miniconda3/bin/python"
 [INFO   ] [Logger      ] Purge log fired. Processing...
 [INFO   ] [Logger      ] Purge finished!
 [INFO   ] [Factory     ] 195 symbols loaded
-[INFO   ] [Image       ] Providers: img_tex, img_imageio, img_dds, img_sdl2 (img_pil, img_ffpyplayer ignored)
+[INFO   ] [Image       ] Providers: img_tex, img_dds, img_sdl2, img_pil (img_ffpyplayer ignored)
 [INFO   ] [Text        ] Provider: sdl2
 [INFO   ] [Window      ] Provider: sdl2
-[INFO   ] [GL          ] Using the "OpenGL ES 2" graphics system
+[INFO   ] [GL          ] Using the "OpenGL" graphics system
 [INFO   ] [GL          ] Backend used <sdl2>
-[INFO   ] [GL          ] OpenGL version <b'2.1 ATI-5.5.17'>
-[INFO   ] [GL          ] OpenGL vendor <b'ATI Technologies Inc.'>
-[INFO   ] [GL          ] OpenGL renderer <b'AMD Radeon Pro 560X OpenGL Engine'>
-[INFO   ] [GL          ] OpenGL parsed version: 2, 1
-[INFO   ] [GL          ] Shading version <b'1.20'>
+[INFO   ] [GL          ] OpenGL version <b'4.6 (Compatibility Profile) Mesa 21.2.6'>
+[INFO   ] [GL          ] OpenGL vendor <b'AMD'>
+[INFO   ] [GL          ] OpenGL renderer <b'AMD Radeon RX 5700 XT (NAVI10, DRM 3.42.0, 5.15.0-105-generic, LLVM 12.0.0)'>
+[INFO   ] [GL          ] OpenGL parsed version: 4, 6
+[INFO   ] [GL          ] Shading version <b'4.60'>
 [INFO   ] [GL          ] Texture max size <16384>
-[INFO   ] [GL          ] Texture max units <16>
+[INFO   ] [GL          ] Texture max units <32>
 [INFO   ] [Window      ] auto add sdl2 input provider
 [INFO   ] [Window      ] virtual keyboard not allowed, single mode, not docked
-Combined env and argv config: {'CLIENT_WORKER_THREADS': '1', 'PROTOCOL_PORT': '9876', 'REGISTRY_PROTOCOL_PORT': '9877', 'ENABLE_PEER_SERVER': '1', 'ENABLE_NETWORK_DELAY': '1', 'MOCK_NETWORK_DELAY_MIN': '100', 'MOCK_NETWORK_DELAY_MAX': '2500', 'CLIENT_LISTEN_IP': '127.0.0.2', 'PEER_REGISTRY_IP': '127.0.0.1'}
-Retrieving peers from registry server...
-Received peers from registry:  []
-Registry had no peers, registering self
-Client listening at 127.0.0.2 on port 9876
-Process ID is 619bef31-ccfe-4fe4-9cde-58c06edacecf
-[a0] Started
-[w0] Started
-waiting for at least one other peer to establish connection...
-[s0] Started
-[INFO   ] [Base        ] Start application main loop
-[INFO   ] [GL          ] NPOT texture support is available
+App configuration (.env + argv): {
+    "CLIENT_WORKER_THREADS": "4",
+    "PROTOCOL_PORT": "9876",
+    "REGISTRY_PROTOCOL_PORT": "9877",
+    "ENABLE_PEER_SERVER": "1",
+    "ENABLE_NETWORK_DELAY": "0",
+    "MOCK_NETWORK_DELAY": "5",
+    "CLIENT_LISTEN_IP": "127.0.0.2",
+    "PEER_REGISTRY_IP": "127.0.0.1"
+}
+[INFO] Retrieving peers from registry server...
+[INFO] Received peers from registry:  []
+[INFO] Registry had no valid peers, registering self
+[INFO] Starting with no peers - waiting for at least one peer to establish connection...
+[INFO] Client listening at 127.0.0.2 on port 9876
+
 ```
 
 Just like the previous implementation without the central peer registry server -  a local Kivy window will appear where it can enter in messages to other registered peers. Sending/receiving messages works as expected - client/peers that join the network will be included when they join - and can drop off when they so desire. Vector clocks are incremented on message send via a client/peer's `sendWorker` - and the receiving client/peers' `networkWorker` handles deliverability.
