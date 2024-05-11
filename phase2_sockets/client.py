@@ -5,7 +5,7 @@ from shared.env_handler import loadArgsAndEnvClient, getPeerNames
 from shared.client_message import constructMessage, constructHello, constructHelloResponse, parseJsonMessage, messageToJson, MessageType
 from shared.server_message import RegistryMessageType, constructBasicMessage
 from shared.vector_clock import canDeliver, deliverMessage, handleMessageQueue, incrementVectorClock
-from shared.network import continueRead, silentFailureClose, sendToSingleAdr, buildNetworkEntry
+from shared.network import continueRead, readSingleMessage, silentFailureClose, sendToSingleAdr, buildNetworkEntry
 from GUI_components import GUI, textUpdateGUI, statusUpdateGUI, updateLivePeerCountGUI
 from kivy.lang import Builder
 from kivy.app import App
@@ -205,7 +205,8 @@ def handleHello(networkEntry, message, peers):
         with vectorClockLock:
             processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
         print('[INFO] Initialised with clock {0}'.format(processVectorClock))
-        registerAndCompleteInitialisation()
+        register()
+        initialisationComplete.set()
         return
 
     #case where we provide clone data as an initialised node in the network
@@ -238,7 +239,8 @@ def handleHelloResponse(networkEntry, message):
             joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
             processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
             print('[INFO] Initialised with clock {0}'.format(processVectorClock))
-            registerAndCompleteInitialisation()
+            register()
+            initialisationComplete.set()
     
 
 #handle broadcast messages received from other processes
@@ -336,10 +338,9 @@ def handlePeerFailure(peer, peers):
 #************************************************************
 #Setup helpers
 
-#completes peer setup by
-#1. registering with the peer server if it's enabled
-#2. flagging that peer initialisation is complete
-def registerAndCompleteInitialisation():
+#registers peer with registry server
+#returns True if registration succeeded, False otherwise
+def register():
     if int(env['ENABLE_PEER_SERVER']) == 1:
         try:
             serverAdr = socket.gethostbyname(env['PEER_REGISTRY_IP'])
@@ -347,12 +348,18 @@ def registerAndCompleteInitialisation():
             print('[ERR] Couldn\'t resolve registry server hostname. Your peers will need to add you manually.')
 
         registerMessage = messageToJson(constructBasicMessage(RegistryMessageType.REGISTER_PEER))
-        senderSocket = buildSenderSocket()
+        
+        try:
+            senderSocket = buildSenderSocket()
+            senderSocket.connect((serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])))
+        except socket.error:
+            print('[ERR] Failed to register with registry server. Your peers will need to add you manually.')
+            return True
 
-        #TODO MAKE SENDER SOCKET ACTUALLY CONNECT TO THE SERVER, RN ITS JUST AN UNCONNECTED SOCKET
         if sendToSingleAdr(registerMessage, senderSocket):
             print('[ERR] Failed to register with registry server. Your peers will need to add you manually.')
-    initialisationComplete.set()
+            return True
+    return False
 
 
 #helper, enqueues the node's initial HELLO message
@@ -400,10 +407,14 @@ def main():
 
         print('[INFO] Retrieving peers from registry server...')
         getPeerMessage = messageToJson(constructBasicMessage(RegistryMessageType.GET_PEERS))
-        senderSocket = buildSenderSocket()
+
+        try:
+            senderSocket = buildSenderSocket()
+            senderSocket.connect((serverAdr, int(env['REGISTRY_PROTOCOL_PORT'])))
+        except socket.error:
+            printAndExit('Failed to connect to registry server')
         if sendToSingleAdr(getPeerMessage, senderSocket):
             printAndExit('Failed to get peers from registry server')
-
         try:
             peerResponse = readSingleMessage(senderSocket)
             if peerResponse == None:
@@ -418,12 +429,7 @@ def main():
             printAndExit('Registry responded with an invalid message')
 
         unconnectedPeers = peerData['peers']
-        
-        if len(unconnectedPeers) == 0:
-            print('[INFO] Registry had no peers, registering self')
-            registerAndCompleteInitialisation()
-        else:
-            print('[INFO] Received peers from registry: ', unconnectedPeers)
+        print('[INFO] Received peers from registry: ', unconnectedPeers)
     else:
         unconnectedPeers = getPeerNames()
     
@@ -441,6 +447,9 @@ def main():
             print('[INFO] Removing it from the startup peer list')
 
     if len(peers) == 0:
+        if int(env['ENABLE_PEER_SERVER']) == 1:
+            print('[INFO] Registry had no valid peers, registering self')
+            register()
         print('[INFO] Starting with no peers - waiting for at least one peer to establish connection...')
         initiallyUnconnected.set()
     

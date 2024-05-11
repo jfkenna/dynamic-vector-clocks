@@ -82,6 +82,33 @@ def continueRead(networkEntry, messageQueue):
             return False
 
 
+#read helper used for communication with registry server
+#reads from a socket until a single message is consumed, then returns the message
+#NOT SAFE IF MULTIPLE MESSAGES ARE BEING SENT THROUGH THE SOCKET
+def readSingleMessage(connection):
+    headerSize = struct.calcsize('!l')
+    contentLength = None
+    received = b''
+    while True:
+        data = connection.recv(2048)
+
+        #return if socket closed early
+        if not data:
+            return None
+        
+        received = received + data
+        
+        #extract message length if not already set
+        if contentLength == None and len(received) >= headerSize:
+            contentLength = struct.unpack('!l', received[:headerSize])[0]
+            received = received[headerSize:]
+        
+        #return message once full length has been read
+        #any 'overreads' will be lost
+        if len(received) >= contentLength:
+            return received[:contentLength]
+
+
 #helper for sending a single message to a single socket
 def sendToSingleAdr(message, connectedSocket):
     try:

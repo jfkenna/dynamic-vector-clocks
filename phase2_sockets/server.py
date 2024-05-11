@@ -3,7 +3,7 @@ import sys
 from threading import Thread, Lock
 from queue import Queue
 from dotenv import dotenv_values
-from shared.validator import validateEnv
+from shared.env_handler import validateEnv
 from shared.server_message import RegistryMessageType, constructBasicMessage, constructPeerResponseMessage
 from shared.client_message import parseJsonMessage, messageToJson
 from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose

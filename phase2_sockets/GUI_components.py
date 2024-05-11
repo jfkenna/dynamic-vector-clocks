@@ -13,7 +13,7 @@ from kivy.core.window import Window
 from shared.client_message import constructMessage, MessageType, messageToJson
 
 #************************************************************
-#Custom classes (styled in layout.kv)
+#Custom classes (styled in GUI.kv)
 
 #scrollable message container
 class Messages(RecycleView):
@@ -95,8 +95,6 @@ class GUI(App):
 #************************************************************
 #UI update methods, schedule events for the GUI thread to perform
 
-#TODO CHANGE SO WE SEND AN ENTIRE NEW LIST, RATHER THAN APPENDING
-#OTHERWISE SCHEDULING DIFFERENCES COULD LEAD TO THE APPEARANCE OF NON-CAUSAL UPDATES
 def textUpdateGUI(sender, message):
     Clock.schedule_once(lambda dt: App.get_running_app().root.children[0].children[1].children[0].addMessage(sender, message), 0.001)
 
