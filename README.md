@@ -1,6 +1,16 @@
 # COMP90020 - Distributed Algorithms - Team Double-J
 
-This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms - for Semetser 1, 2024.
+## Authors
+
+Author Name  | Student Number | Email
+-------------|----------------|--------------------------------
+Joel Kenna   | 995401         | jfkenna@student.unimelb.edu.au
+James Sammut | 502030         | j.sammut@student.unimelb.edu.au
+
+
+## Introduction
+
+This repository holds the source files of the project of Team Double-J (James Sammut and Joel Kenna) for COMP90020: Distributed Algorithms, Semester 1, 2024.
 
 The main topic that the team has picked for investigation is Logical Time - and in particular, the implementation of **Dynamic Vector Clocks**. Initially, **Matrix Clocks** were selected as the team's first choice of algorithm to implement; with the aim of providing both unicast and broadcast causal delivery for chatting with a group of peers. However, we ultimately decided to use **Dynamic Vector Clocks**, for three main reasons:
 
