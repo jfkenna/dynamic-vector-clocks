@@ -109,7 +109,7 @@ def broadcastWorker(outgoingMessageQueue, receivedMessages, peers):
         #otherwise, retransmit without changes
         if parsedMessage['sender'] == None:
             receivedMessages[parsedMessage['id']] = True
-            with incrementLock:
+            with vectorClockLock:
                 processVectorClock = incrementVectorClock(processVectorClock, processId)
                 outgoingMessage = messageToJson(constructMessage(MessageType.BROADCAST_MESSAGE, processVectorClock, parsedMessage['text'], processId, processIp))
         else:
@@ -192,7 +192,7 @@ def handleHello(networkEntry, message, peers):
 
     #case where we provide clone data as an unconnected, uninitialized peer
     if (not initialisationComplete.is_set()) and initiallyUnconnected.is_set():
-        with incrementLock:
+        with vectorClockLock:
             emptyHelloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, preInitialisedReceivedMessages))
         
         with networkEntry['lock']:
@@ -202,13 +202,14 @@ def handleHello(networkEntry, message, peers):
                 return
         
         #initialise after sending peer data
-        processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
+        with vectorClockLock:
+            processVectorClock = handleMessageQueue(processVectorClock, preInitialisedReceivedMessages, None, textUpdateGUI)
         print('[INFO] Initialised with clock {0}'.format(processVectorClock))
         registerAndCompleteInitialisation()
         return
 
     #case where we provide clone data as an initialised node in the network
-    with incrementLock:
+    with vectorClockLock:
         helloResponse = messageToJson(constructHelloResponse(processId, processIp, processVectorClock, processMessageQueue))
 
     with networkEntry['lock']:
@@ -232,11 +233,12 @@ def handleHelloResponse(networkEntry, message):
     #join messages we captured prior to initialisation with the undelivered messages
     #received from the cloned processes
     with preInitialisedLock:
-        processMessageQueue = message['undeliveredMessages'] + preInitialisedReceivedMessages
-        joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
-        processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
-        print('[INFO] Initialised with clock {0}'.format(processVectorClock))
-        registerAndCompleteInitialisation()
+        with vectorClockLock:
+            processMessageQueue = message['undeliveredMessages'] + preInitialisedReceivedMessages
+            joinedClock = message['clock'] + processVectorClock #entire received clock + our single clock entry
+            processVectorClock = handleMessageQueue(joinedClock, processMessageQueue, None, textUpdateGUI)
+            print('[INFO] Initialised with clock {0}'.format(processVectorClock))
+            registerAndCompleteInitialisation()
     
 
 #handle broadcast messages received from other processes
@@ -265,7 +267,7 @@ def handleBroadcastMessage(message, receivedMessages, outgoingMessageQueue):
 
     #if this processId is the sender of the message, don't worry about delivering message
     if not message['sender'] == processId:
-        with deliverabilityLock:
+        with vectorClockLock:
             if canDeliver(processVectorClock, message):
                 processVectorClock = deliverMessage(processVectorClock, message, processId, textUpdateGUI)
             else:
@@ -525,8 +527,7 @@ preInitialisedLock = Lock() #lock for pre-initialisation message queue
 selectorLock = Lock()
 
 #vector clock locks
-deliverabilityLock = Lock() #lock for checking for message deliverability
-incrementLock = Lock() #lock for this peer to increment its own vector clock
+vectorClockLock = Lock() #lock for checking for message deliverability
 
 #************************************************************
 #events
