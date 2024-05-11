@@ -150,7 +150,7 @@ python3 client.py 127.0.0.1
 The running client/peer will then start its respective workers; and then loop for other client/peer IPs/hostnames to connect to. Once completed with the respective client/peers - enter `f` or `finished`:
 
 ```
-╰─ python client.py 127.0.0.1
+╰─ python3 client.py 127.0.0.1
 [INFO   ] [Logger      ] Record log in /home/joel/.kivy/logs/kivy_24-05-11_81.txt
 [INFO   ] [Kivy        ] v2.3.0
 [INFO   ] [Kivy        ] Installed at "/home/joel/miniconda3/lib/python3.12/site-packages/kivy/__init__.py"
@@ -198,9 +198,16 @@ Enter hostname: f
 
 Other clients/peers that wish to connect to the network will need to be connected in a similar fashion - and **with a different IP/hostname**. 
 
-Upon a client/peer starting - a local Kivy window will appear where they can enter in messages to other clients/peers. Sending/receiving messages works as expected - clients/peers that join the network will be included when they join - and can drop off when they so desire. Vector clocks are incremented on message send via a client/peer's `sendWorker` - and the receiving client/peers' `networkWorker` handles deliverability:
+Once the client has connected to at least one other peer, a local Kivy window will appear where they can enter in messages to be broadcast to other peers. 
+- These messages can include markup to allow styling of size, text colour, boldness, etc.
+- The client can keep track of peers they're connected to by checking the top left corner of the window.
+- If the client ever has no peers remaining, an error is displayed in the top right corner of the window.
+- Peers may join and leave the network as they desire.
 
-![P2P Messaging App - Without a central peer registry server](/phase2_sockets/images/phase2-no-server.png){width=50%}
+The images below show two peers that have just exchanged messages. The peer at `127.0.0.2` has added styling to their message by sending `[size=50]Hi! Did you know we support [color=ff0000]markup[/color][/size]`.
+
+![P2P Messaging App - Without a central peer registry (client at 127.0.0.1)](/phase2_sockets/images/ClientExample1.png)
+![P2P Messaging App - Without a central peer registry (client at 127.0.0.2)](/phase2_sockets/images/ClientExample2.png)
 
 #### With simulated network delay
 
@@ -211,7 +218,6 @@ To simulate network delay for communication between processes, the following cha
 The client can then be invoked as per the instructions for running without the peer registry server, except that an additional argument should be provided to specifiy the IP whose messages should be delayed. For instance, to run the client at `127.0.0.1` while simulate the delay of messages from `127.0.0.2`, use the following command:
 
 ```
-cd comp90020-double-j/phase2_sockets/
 python3 client.py 127.0.0.1 127.0.0.2
 ```
 
@@ -248,7 +254,7 @@ python3 client.py 127.0.0.2 127.0.0.1
 Running the above will map this client/peer's IP: and based on if this is the first peer (or not) as explored in the [invocation](#invocation-1) section will either register with the server and await new client/peer connections - or say `hello` to all other client/peers (message merging) and then register itself with the server (and thus network). There is **no need** to specify IPs for other client/peers in this scenario - as this is the job of the server to direct to client/peers that join in at any time:
 
 ```
-╰─ python client.py 127.0.0.2 127.0.0.1
+╰─ python3 client.py 127.0.0.2 127.0.0.1
 [INFO   ] [Logger      ] Record log in /home/joel/.kivy/logs/kivy_24-05-11_83.txt
 [INFO   ] [Kivy        ] v2.3.0
 [INFO   ] [Kivy        ] Installed at "/home/joel/miniconda3/lib/python3.12/site-packages/kivy/__init__.py"
@@ -289,9 +295,18 @@ App configuration (.env + argv): {
 
 ```
 
-Just like the previous implementation without the central peer registry server -  a local Kivy window will appear where it can enter in messages to other registered peers. Sending/receiving messages works as expected - client/peers that join the network will be included when they join - and can drop off when they so desire. Vector clocks are incremented on message send via a client/peer's `sendWorker` - and the receiving client/peers' `networkWorker` handles deliverability.
+Once connected, the client will appear identical to no-peer registry server flow.
 
-![P2P Messaging App - With a central peer registry server](/phase2_sockets/images/phase2-with-central-server.png){width=80%}
+#### With a Peer Registry Server AND network delay
+
+If you intend to run with both a registry server and a network delay, you must specify the client ip, then the server ip, then the throttled ip. For example, to run a client at `127.0.0.2` with a registry server at `127.0.0.1` and a throttled ip at `127.0.0.99`, use the following command:
+
+```
+python3 client.py 127.0.0.2 127.0.0.1 127.0.0.99
+```
+
+Note that `.env` params should be configured as per the instructions in the network delay and registry server sections of the readme.
+
 
 ## Presentation
 
