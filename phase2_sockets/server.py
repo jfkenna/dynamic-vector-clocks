@@ -8,38 +8,18 @@ from shared.server_message import RegistryMessageType, constructBasicMessage, co
 from shared.client_message import parseJsonMessage, messageToJson
 from shared.network import sendWithHeaderAndEncoding, readSingleMessage, silentFailureClose
 
+#The server is not a focus of our project, so our implementation is relatively naive
+#peers are not polled for liveness etc.
+
+#************************************************************
+#worker threads
+
+#worker thread for accepting incoming connections
 def acceptWorker(connectionQueue, serverSocket):
     while True:
         connectionQueue.put(serverSocket.accept())
 
-def handleMessage(message, connection, peers):
-    match message['type']:
-        case RegistryMessageType.GET_PEERS:
-            with lock:
-                response = messageToJson(constructPeerResponseMessage(list(peers.keys())))
-            sendWithHeaderAndEncoding(connection, response)
-
-        case RegistryMessageType.REGISTER_PEER:
-            peerKey = connection.getpeername()[0]
-            with lock:
-                peers[peerKey] = True
-            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
-            sendWithHeaderAndEncoding(connection, response)
-
-        case RegistryMessageType.DEREGISTER_PEER:
-            peerKey = connection.getpeername()[0]
-            with lock:
-                if peerKey in peers:
-                    del peers[peerKey]
-            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
-            sendWithHeaderAndEncoding(connection, response)
-
-        case _:
-            response = messageToJson(constructBasicMessage(RegistryMessageType.BAD_MESSAGE))
-            sendWithHeaderAndEncoding(connection, response)
-    print('After operation {0}'.format(peers))
-    return
-
+#worker thread for handling incoming requests
 def worker(connectionQueue, peers):
     while True:
         connection, adr = connectionQueue.get()
@@ -64,16 +44,54 @@ def worker(connectionQueue, peers):
         continue
 
 
+#helper function for processing incoming requests
+def handleMessage(message, connection, peers):
+    match message['type']:
+        case RegistryMessageType.GET_PEERS:
+            with peersLock:
+                response = messageToJson(constructPeerResponseMessage(list(peers.keys())))
+            sendWithHeaderAndEncoding(connection, response)
+
+        case RegistryMessageType.REGISTER_PEER:
+            peerKey = connection.getpeername()[0]
+            with peersLock:
+                peers[peerKey] = True
+            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
+            sendWithHeaderAndEncoding(connection, response)
+
+        case RegistryMessageType.DEREGISTER_PEER:
+            peerKey = connection.getpeername()[0]
+            with peersLock:
+                if peerKey in peers:
+                    del peers[peerKey]
+            response = messageToJson(constructBasicMessage(RegistryMessageType.OK))
+            sendWithHeaderAndEncoding(connection, response)
+
+        #handle messages with invalid or unrecognised types
+        case _:
+            response = messageToJson(constructBasicMessage(RegistryMessageType.BAD_MESSAGE))
+            sendWithHeaderAndEncoding(connection, response)
+    print('After operation {0}'.format(peers))
+    return
+
+
+#************************************************************
+#server setup
+
 def main():
-    #shared data
+    #incoming connections
     connectionQueue = Queue()
+
+    #peer registry
     peers = {}
     
-    #initial setup copied from client
+    #build server socket
     acceptSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     acceptSocket.bind((ip, int(env['REGISTRY_PROTOCOL_PORT'])))
     acceptSocket.listen()
-    print('Server listening at {0} on port {1}'.format(ip, env['REGISTRY_PROTOCOL_PORT']))
+    print('[INFO] Server listening at {0} on port {1}'.format(ip, env['REGISTRY_PROTOCOL_PORT']))
+
+    #build listener and worker threads
     acceptThread = Thread(target=acceptWorker, args=(connectionQueue, acceptSocket, ))
     acceptThread.start()
     workerThread = Thread(target=worker, args=(connectionQueue, peers))
@@ -82,14 +100,17 @@ def main():
     workerThread.join()
 
 if len(sys.argv) < 2:
-    print("You must provide the server ip, exiting...")
+    print("[ERR] You must provide the server ip, exiting...")
     exit()
 
 env = dotenv_values('.env')
 if validateEnv(env, ['REGISTRY_PROTOCOL_PORT']) == None:
     exit()
 ip = sys.argv[1]
-lock = Lock()
+
+#lock for peer registry dict
+peersLock = Lock()
+
 main()
 
 '''

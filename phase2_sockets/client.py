@@ -370,16 +370,8 @@ def sayHello(peers, outgoingMessageQueue):
 
 
 #************************************************************
-
-#print helper
-def printAndExit(message):
-    print('[ERR] ' + message)
-    print('exiting...')
-    exit()
-
-
 #App
-#setup env and launch threads / gui
+#sets env and launches threads / gui
 def main():
 
     #messages that have been read from a socket and need to be handled
@@ -504,7 +496,11 @@ def main():
     silentFailureClose(acceptSocket)
     print('[INFO] All threads closed... exiting...')
     
-
+#print helper
+def printAndExit(message):
+    print('[ERR] ' + message)
+    print('exiting...')
+    exit()
 
 #************************************************************
 #setup env
