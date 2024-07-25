@@ -7,6 +7,10 @@ Author Name  | Email                           |
 Joel Kenna   | jfkenna@student.unimelb.edu.au  |
 James Sammut | j.sammut@student.unimelb.edu.au |
 
+#### WARNING AND LICENSE
+
+THIS SOFTWARE IS PROVIDED FOR USE "AS IS" WITH _**NO WARRANTY**_, EXPLICT OR IMPLICT. DO NOT REPRODUCE, COPY, OR ALTER THIS CODE WITHOUT THE PERMISSION OF _**BOTH**_ AUTHORS. 
+
 ## Contents
 
 This **peer to peer**, **decentralized** application uses [**Dynamic Vector Clocks**](https://vs.inf.ethz.ch/edu/HS2016/VS/exercises/A3/DVC_Landes.pdf) to provide functionality expected from resilient multi-tenant chat applications, namely the ability to:
